@@ -1,8 +1,8 @@
 {
-    "name": "onelogin/php-saml",
-    "description": "OneLogin PHP SAML Toolkit",
+    "name": "eid-login/php-saml",
+    "description": "Fork of OneLogin PHP SAML Toolkit",
     "license": "MIT",
-    "homepage": "https://developers.onelogin.com/saml/php",
+    "homepage": "https://github.com/eid-login/php-saml/",
     "keywords": ["saml", "saml2", "onelogin"],
     "autoload": {
         "psr-4": {
@@ -11,18 +11,12 @@
     },
     "support": {
         "email": "sixto.garcia@onelogin.com",
-        "issues": "https://github.com/onelogin/php-saml/issues",
-        "source": "https://github.com/onelogin/php-saml/"
+        "issues": "https://github.com/eid-login/php-saml/issues",
+        "source": "https://github.com/eid-login/php-saml/"
     },
-    "repositories": [
-      {
-        "type": "vcs",
-        "url": "https://github.com/eid-login/xmlseclibs"
-      }
-    ], 
     "require": {
         "php": ">=7.3",
-        "robrichards/xmlseclibs": "1.0.0"
+        "eid-login/xmlseclibs": "1.0.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.5",
