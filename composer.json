@@ -10,7 +10,7 @@
         }
     },
     "support": {
-        "email": "sixto.garcia@onelogin.com",
+        "email": "eID-Login@ecsec.de",
         "issues": "https://github.com/eid-login/php-saml/issues",
         "source": "https://github.com/eid-login/php-saml/"
     },
