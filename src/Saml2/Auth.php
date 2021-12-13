@@ -600,7 +600,7 @@ class Auth
      */
     public function login($returnTo = null, array $parameters = array(), $forceAuthn = false, $isPassive = false, $stay = false, $setNameIdPolicy = true, $nameIdValueReq = null, $reqId = null)
     {
-        $authnRequest = $this->buildAuthnRequest($this->_settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq, $reqId);
+        $authnRequest = $this->buildAuthnRequest($this->_settings, $forceAuthn, $isPassive, $setNameIdPolicy, $reqId, $nameIdValueReq);
 
         $this->_lastRequest = $authnRequest->getXML();
         $this->_lastRequestID = $authnRequest->getId();
@@ -727,12 +727,12 @@ class Auth
      * @param bool     $forceAuthn      When true the AuthNRequest will set the ForceAuthn='true'
      * @param bool     $isPassive       When true the AuthNRequest will set the Ispassive='true'
      * @param bool     $setNameIdPolicy When true the AuthNRequest will set a nameIdPolicy element
-     * @param string   $nameIdValueReq  Indicates to the IdP the subject that should be authenticated
      * @param string   $reqId           The id of the request to create
+     * @param string   $nameIdValueReq  Indicates to the IdP the subject that should be authenticated
      *
      * @return AuthnRequest The AuthnRequest object
      */
-    public function buildAuthnRequest($settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq = null, $reqId)
+    public function buildAuthnRequest($settings, $forceAuthn, $isPassive, $setNameIdPolicy, $reqId, $nameIdValueReq = null)
     {
         return new AuthnRequest($settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq, $reqId);
     }
