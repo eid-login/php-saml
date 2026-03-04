@@ -14,6 +14,12 @@
         "issues": "https://github.com/eid-login/php-saml/issues",
         "source": "https://github.com/eid-login/php-saml/"
     },
+    "repositories": [
+      {
+        "type": "vcs",
+        "url": "https://github.com/eid-login/xmlseclibs"
+      }
+    ], 
     "require": {
         "php": ">=7.3",
         "eid-login/xmlseclibs": "1.0.0"

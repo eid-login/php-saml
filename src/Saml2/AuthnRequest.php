@@ -13,6 +13,10 @@
 
 namespace OneLogin\Saml2;
 
+use RobRichards\XMLSecLibs\XMLSecurityKey;
+use RobRichards\XMLSecLibs\XMLSecurityDSig;
+use RobRichards\XMLSecLibs\XMLSecEnc;
+
 /**
  * SAML 2 Authentication Request
  */
@@ -47,15 +51,19 @@ class AuthnRequest
      * @param bool $isPassive When true the AuthNReuqest will set the Ispassive='true'
      * @param bool $setNameIdPolicy When true the AuthNReuqest will set a nameIdPolicy
      * @param string $nameIdValueReq Indicates to the IdP the subject that should be authenticated
+     * @param string $id The id of the request to create
      */
-    public function __construct(\OneLogin\Saml2\Settings $settings, $forceAuthn = false, $isPassive = false, $setNameIdPolicy = true, $nameIdValueReq = null)
+    public function __construct(\OneLogin\Saml2\Settings $settings, $forceAuthn = false, $isPassive = false, $setNameIdPolicy = true, $nameIdValueReq = null, $id = null)
     {
         $this->_settings = $settings;
+        if ($id === null) {
+            $id = Utils::generateUniqueID();
+        }
+        $this->_id = $id;
 
         $spData = $this->_settings->getSPData();
         $security = $this->_settings->getSecurityData();
 
-        $id = Utils::generateUniqueID();
         $issueInstant = Utils::parseTime2SAML(time());
 
         $subjectStr = "";
@@ -145,6 +153,53 @@ REQUESTEDAUTHN;
             }
         }
 
+        // process extensions
+        $nsArr = array();
+        $extArr = $settings->getAuthnReqExt();
+        $extStr = '';
+        if (count($extArr) > 0) {
+            $extStr .= '    <samlp:Extensions>';
+            foreach ($extArr as $extKey => $extVal) {
+                if ($extKey === "tr03130" && $extVal != "") {
+                    // create dom from given xml
+                    $dom = new \DOMDocument();
+                    if(!$dom->loadXML($extVal)) {
+                        throw new \Exception('could not build tr03031 AuthnRequestExtension, invalid XML given');
+                    }
+                    // encryption
+                    $idpData = $settings->getIdPData();
+                    $idpCertEnc = $idpData['x509certMulti']['encryption'][0];
+                    if (!openssl_x509_read($idpCertEnc)) {
+                        throw new \Exception('could not build tr03031 AuthnRequestExtension, invalid certificate given');
+                    } 
+                    $objKey = new XMLSecurityKey(XMLSecurityKey::AES256_GCM);
+	                $objKey->generateSessionKey();
+                    $siteKey = new XMLSecurityKey(XMLSecurityKey::RSA_OAEP_MGF1P, array('type'=>'public'));
+                    $siteKey->loadKey($idpCertEnc, false, TRUE);
+                    $enc = new XMLSecEnc();
+	                $enc->type = XMLSecEnc::Element;
+	                $enc->setNode($dom->documentElement);
+                    $enc->encryptKey($siteKey, $objKey);
+	                $encNode = $enc->encryptNode($objKey);
+                    // add digest algo node
+                    $digestNode = $dom->createElement('dsig:DigestMethod');
+                    $digestNode->setAttribute('Algorithm', 'http://www.w3.org/2000/09/xmldsig#sha1');
+                    $encNode->childNodes[1]->childNodes[0]->childNodes[0]->appendChild($digestNode);
+                    // put it all together
+                    $extStr .= '<eid:EncryptedAuthnRequestExtension>';
+                    $extStr .= $dom->saveXML($encNode);
+                    $extStr .= '</eid:EncryptedAuthnRequestExtension>';
+                    // add needed namespaces
+                    $nsArr[] = 'xmlns:eid="http://bsi.bund.de/eID/"';
+                    // enforce redirect binding
+                    $spData['assertionConsumerService']['binding'] = 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect';
+                }
+            }
+            $extStr .= '    </samlp:Extensions>';
+        }
+        $nsArr = array_unique($nsArr);
+        $nsStr = implode(" ", $nsArr);
+
         $spEntityId = htmlspecialchars($spData['entityId'], ENT_QUOTES);
         $acsUrl = htmlspecialchars($spData['assertionConsumerService']['url'], ENT_QUOTES);
         $destination = $this->_settings->getIdPSSOUrl();
@@ -152,6 +207,7 @@ REQUESTEDAUTHN;
 <samlp:AuthnRequest
     xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
     xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"
+{$nsStr}
     ID="$id"
     Version="2.0"
 {$providerNameStr}{$forceAuthnStr}{$isPassiveStr}
@@ -159,7 +215,7 @@ REQUESTEDAUTHN;
     Destination="{$destination}"
     ProtocolBinding="{$spData['assertionConsumerService']['binding']}"
     AssertionConsumerServiceURL="{$acsUrl}">
-    <saml:Issuer>{$spEntityId}</saml:Issuer>{$subjectStr}{$nameIdPolicyStr}{$requestedAuthnStr}
+    <saml:Issuer>{$spEntityId}</saml:Issuer>{$extStr}{$subjectStr}{$nameIdPolicyStr}{$requestedAuthnStr}
 </samlp:AuthnRequest>
 AUTHNREQUEST;
 

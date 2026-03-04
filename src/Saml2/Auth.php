@@ -216,6 +216,67 @@ class Auth
         $this->_paths['schemas'] = $path;
     }
 
+    /*
+     * Create the SAML Response sent by the IdP.
+     *
+     * @throws Error
+     */
+    public function createResponse()
+    {
+        $this->_errors = array();
+        $responseParam = null;
+        if (isset($_POST['SAMLResponse'])) {
+            $responseParam = $_POST['SAMLResponse'];
+            $responseParam = base64_decode($responseParam);
+        } else if (isset($_GET['SAMLResponse'])) {
+            $responseParam = $_GET['SAMLResponse'];
+            $responseParam = base64_decode($responseParam);
+            $responseParam = gzinflate($responseParam);
+        } else {
+            $this->_errors[] = 'SAML Response not found';
+            throw new Error(
+                'SAML Response not found',
+                Error::SAML_RESPONSE_NOT_FOUND
+            );
+        }
+        $response = new Response($this->_settings, $responseParam);
+
+        return $response;
+    }
+
+    /**
+     * Process an already created SAML Response.
+     *
+     * @param Response $response The response
+     * @param string|null $requestId The ID of the AuthNRequest sent by this SP to the IdP
+     *
+     * @throws Error
+     * @throws ValidationError
+     */
+    public function processCreatedResponse($response, $requestId = null)
+    {
+        $this->_lastResponse = $response->getXMLDocument();
+
+        if ($response->isValid($requestId)) {
+            $this->_attributes = $response->getAttributes();
+            $this->_attributesWithFriendlyName = $response->getAttributesWithFriendlyName();
+            $this->_nameid = $response->getNameId();
+            $this->_nameidFormat = $response->getNameIdFormat();
+            $this->_nameidNameQualifier = $response->getNameIdNameQualifier();
+            $this->_nameidSPNameQualifier = $response->getNameIdSPNameQualifier();
+            $this->_authenticated = true;
+            $this->_sessionIndex = $response->getSessionIndex();
+            $this->_sessionExpiration = $response->getSessionNotOnOrAfter();
+            $this->_lastMessageId = $response->getId();
+            $this->_lastAssertionId = $response->getAssertionId();
+            $this->_lastAssertionNotOnOrAfter = $response->getAssertionNotOnOrAfter();
+        } else {
+            $this->_errors[] = 'invalid_response';
+            $this->_lastErrorException = $response->getErrorException();
+            $this->_lastError = $response->getError();
+        }
+    }
+
     /**
      * Process the SAML Response sent by the IdP.
      *
@@ -533,15 +594,16 @@ class Auth
      * @param bool        $stay            True if we want to stay (returns the url string) False to redirect
      * @param bool        $setNameIdPolicy When true the AuthNRequest will set a nameIdPolicy element
      * @param string      $nameIdValueReq  Indicates to the IdP the subject that should be authenticated
+     * @param string      $reqId           The id of the request to create
      *
      * @return string|null If $stay is True, it return a string with the SLO URL + LogoutRequest + parameters
      * @phpstan-return ($stay is true ? string : never)
      *
      * @throws Error
      */
-    public function login($returnTo = null, array $parameters = array(), $forceAuthn = false, $isPassive = false, $stay = false, $setNameIdPolicy = true, $nameIdValueReq = null)
+    public function login($returnTo = null, array $parameters = array(), $forceAuthn = false, $isPassive = false, $stay = false, $setNameIdPolicy = true, $nameIdValueReq = null, $reqId = null)
     {
-        $authnRequest = $this->buildAuthnRequest($this->_settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq);
+        $authnRequest = $this->buildAuthnRequest($this->_settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq, $reqId);
 
         $this->_lastRequest = $authnRequest->getXML();
         $this->_lastRequestID = $authnRequest->getId();
@@ -670,12 +732,13 @@ class Auth
      * @param bool     $isPassive       When true the AuthNRequest will set the Ispassive='true'
      * @param bool     $setNameIdPolicy When true the AuthNRequest will set a nameIdPolicy element
      * @param string   $nameIdValueReq  Indicates to the IdP the subject that should be authenticated
+     * @param string   $reqId           The id of the request to create
      *
      * @return AuthnRequest The AuthnRequest object
      */
-    public function buildAuthnRequest(Settings $settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq = null)
+    public function buildAuthnRequest(Settings $settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq = null, $reqId)
     {
-        return new AuthnRequest($settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq);
+        return new AuthnRequest($settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq, $reqId);
     }
 
     /**

@@ -219,17 +219,17 @@ METADATA_TEMPLATE;
 
     /**
      * Adds the x509 descriptors (sign/encryption) to the metadata
-     * The same cert will be used for sign/encrypt
      *
      * @param string $metadata       SAML Metadata XML
-     * @param string $cert           x509 cert
+     * @param string $cert           x509 cert for signature
+     * @param string $certEnc        x509 cert for encryption
      * @param bool   $wantsEncrypted Whether to include the KeyDescriptor for encryption
      *
      * @return string Metadata with KeyDescriptors
      *
      * @throws Exception
      */
-    public static function addX509KeyDescriptors($metadata, $cert, $wantsEncrypted = true)
+    public static function addX509KeyDescriptors($metadata, $cert, $certEnc = '', $wantsEncrypted = true)
     {
         $xml = new DOMDocument();
         $xml->preserveWhiteSpace = false;
@@ -245,30 +245,29 @@ METADATA_TEMPLATE;
 
         $formatedCert = Utils::formatCert($cert, false);
         $x509Certificate = $xml->createElementNS(Constants::NS_DS, 'X509Certificate', $formatedCert);
-
         $keyData = $xml->createElementNS(Constants::NS_DS, 'ds:X509Data');
         $keyData->appendChild($x509Certificate);
-
         $keyInfo = $xml->createElementNS(Constants::NS_DS, 'ds:KeyInfo');
         $keyInfo->appendChild($keyData);
-
         $keyDescriptor = $xml->createElementNS(Constants::NS_MD, "md:KeyDescriptor");
-
         $SPSSODescriptor = $xml->getElementsByTagName('SPSSODescriptor')->item(0);
         $SPSSODescriptor->insertBefore($keyDescriptor->cloneNode(), $SPSSODescriptor->firstChild);
-        if ($wantsEncrypted === true) {
-            $SPSSODescriptor->insertBefore($keyDescriptor->cloneNode(), $SPSSODescriptor->firstChild);
-        }
-
         $signing = $xml->getElementsByTagName('KeyDescriptor')->item(0);
         $signing->setAttribute('use', 'signing');
         $signing->appendChild($keyInfo);
 
-        if ($wantsEncrypted === true) {
-            $encryption = $xml->getElementsByTagName('KeyDescriptor')->item(1);
+        if ($certEnc != '' && $wantsEncrypted === true) {
+            $formatedCertEnc = Utils::formatCert($certEnc, false);
+            $x509CertificateEnc = $xml->createElementNS(Constants::NS_DS, 'X509Certificate', $formatedCertEnc);
+            $keyDataEnc = $xml->createElementNS(Constants::NS_DS, 'ds:X509Data');
+            $keyDataEnc->appendChild($x509CertificateEnc);
+            $keyInfoEnc = $xml->createElementNS(Constants::NS_DS, 'ds:KeyInfo');
+            $keyInfoEnc->appendChild($keyDataEnc);
+            $keyDescriptorEnc = $xml->createElementNS(Constants::NS_MD, "md:KeyDescriptor");
+            $SPSSODescriptor->insertBefore($keyDescriptorEnc->cloneNode(), $SPSSODescriptor->firstChild);
+            $encryption = $xml->getElementsByTagName('KeyDescriptor')->item(0);
             $encryption->setAttribute('use', 'encryption');
-
-            $encryption->appendChild($keyInfo->cloneNode(true));
+            $encryption->appendChild($keyInfoEnc);
         }
 
         return $xml->saveXML();
