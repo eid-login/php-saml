@@ -95,13 +95,13 @@ class Response
             Utils::setBaseURL($baseURL);
         }
 
-        $this->response = base64_decode($response);
+        $this->response = $response;
 
         $this->document = new DOMDocument();
         $this->document = Utils::loadXML($this->document, $this->response);
         if (!$this->document) {
             throw new ValidationError(
-                "SAML Response could not be processed",
+                "SAML Response could not be processed: ".$this->response,
                 ValidationError::INVALID_XML_FORMAT
             );
         }
@@ -171,18 +171,21 @@ class Response
                 $security = $this->_settings->getSecurityData();
 
                 if ($security['wantXMLValidation']) {
-                    $errorXmlMsg = "Invalid SAML Response. Not match the saml-schema-protocol-2.0.xsd";
-                    $res = Utils::validateXML($this->document, 'saml-schema-protocol-2.0.xsd', $this->_settings->isDebugActive(), $this->_settings->getSchemasPath());
+                    // schema and schemapath for validation
+                    $schema = 'eidlogin.xsd';
+                    $schemaPath = $this->_settings->getSchemasPath();
+                    // check xml
+                    $errorXmlMsg = "Invalid SAML Response. Not match the ".$schema;
+                    $res = Utils::validateXML($this->document, $schema, $this->_settings->isDebugActive(), $schemaPath);
                     if (!$res instanceof DOMDocument) {
                         throw new ValidationError(
                             $errorXmlMsg,
                             ValidationError::INVALID_XML_FORMAT
                         );
                     }
-
                     // If encrypted, check also the decrypted document
                     if ($this->encrypted) {
-                        $res = Utils::validateXML($this->decryptedDocument, 'saml-schema-protocol-2.0.xsd', $this->_settings->isDebugActive(), $this->_settings->getSchemasPath());
+                        $res = Utils::validateXML($this->decryptedDocument, $schema, $this->_settings->isDebugActive(), $schemaPath);
                         if (!$res instanceof DOMDocument) {
                             throw new ValidationError(
                                 $errorXmlMsg,
@@ -405,7 +408,10 @@ class Response
                 }
             }
 
-            if (empty($signedElements) || (!$hasSignedResponse && !$hasSignedAssertion)) {
+            // signature check is done outside of php-saml for TR-03130
+            if (array_key_exists('tr03130',$this->_settings->getAuthnReqExt())) {
+                return true;
+            } else if (empty($signedElements) || (!$hasSignedResponse && !$hasSignedAssertion)) {
                 throw new ValidationError(
                     'No Signature found. SAML Response rejected',
                     ValidationError::NO_SIGNATURE_FOUND
@@ -782,6 +788,18 @@ class Response
     }
 
     /**
+     * Gets the Attributes from the AttributeStatement element as XML
+     *
+     * @return array The attributes of the SAML Assertion as XML
+     *
+     * @throws ValidationError
+     */
+    public function getAttributesAsXML()
+    {
+        return $this->_getAttributesByKeyName('Name', true);
+    }
+
+    /**
      * Gets the Attributes from the AttributeStatement element using their FriendlyName.
      *
      * @return array The attributes of the SAML Assertion
@@ -795,12 +813,13 @@ class Response
 
     /**
      * @param string $keyName
+     * @param bool $returnXML
      *
      * @return array
      *
      * @throws ValidationError
      */
-    private function _getAttributesByKeyName($keyName = "Name")
+    private function _getAttributesByKeyName($keyName = "Name", $returnXML=false)
     {
         $attributes = array();
         $entries = $this->_queryAssertion('/saml:AttributeStatement/saml:Attribute');
@@ -826,7 +845,11 @@ class Response
             foreach ($entry->childNodes as $childNode) {
                 $tagName = ($childNode->prefix ? $childNode->prefix.':' : '') . 'AttributeValue';
                 if ($childNode->nodeType == XML_ELEMENT_NODE && $childNode->tagName === $tagName) {
+                  if($returnXML) {
+                    $attributeValues[] = $childNode->ownerDocument->saveXML($childNode);
+                  } else {
                     $attributeValues[] = $childNode->nodeValue;
+                  }
                 }
             }
 
@@ -1116,7 +1139,7 @@ class Response
      */
     protected function decryptAssertion(\DomNode $dom)
     {
-        $pem = $this->_settings->getSPkey();
+        $pem = $this->_settings->getSPkeyEnc();
 
         if (empty($pem)) {
             throw new Error(
@@ -1223,12 +1246,14 @@ class Response
 
     /**
      * Returns the SAML Response document (If contains an encrypted assertion, decrypts it)
+     * 
+     * @param bool $encrypted Return the encrypted version
      *
      * @return DomDocument SAML Response
      */
-    public function getXMLDocument()
+    public function getXMLDocument($encrypted=false)
     {
-        if ($this->encrypted) {
+        if ($this->encrypted && !$encrypted) {
             return $this->decryptedDocument;
         } else {
             return $this->document;
