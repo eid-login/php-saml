@@ -227,10 +227,8 @@ class Auth
         $responseParam = null;
         if (isset($_POST['SAMLResponse'])) {
             $responseParam = $_POST['SAMLResponse'];
-            $responseParam = base64_decode($responseParam);
         } else if (isset($_GET['SAMLResponse'])) {
             $responseParam = $_GET['SAMLResponse'];
-            $responseParam = base64_decode($responseParam);
             $responseParam = gzinflate($responseParam);
         } else {
             $this->_errors[] = 'SAML Response not found';
