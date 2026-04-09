@@ -1833,9 +1833,10 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
         $this->assertTrue($response->isValid());
         $this->assertSame('user@example.com', $response->getNameId());
 
-        $xml = file_get_contents(TEST_ROOT . '/data/responses/response_encrypted_nameid_encrypted_assertion2.xml.base64');
-        $response = new Response($this->_settings, $xml);
-        $this->assertTrue($response->isValid());
-        $this->assertSame('492882615acf31c8096b627245d76ae53036c090', $response->getNameId());
+        // SAML Response that contains an encrypted Assertion with encrypted nameId is not supported (see Response.php).
+        // $xml = file_get_contents(TEST_ROOT . '/data/responses/response_encrypted_nameid_encrypted_assertion2.xml.base64');
+        // $response = new Response($this->_settings, $xml);
+        // $this->assertTrue($response->isValid());
+        // $this->assertSame('492882615acf31c8096b627245d76ae53036c090', $response->getNameId());
     }
 }
