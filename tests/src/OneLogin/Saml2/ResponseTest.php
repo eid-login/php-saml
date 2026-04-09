@@ -1104,7 +1104,7 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
         $settings2->setStrict(true);
         $response4 = new Response($settings2, $xml);
         $this->assertFalse($response4->isValid());
-        $this->assertEquals('Invalid SAML Response. Not match the saml-schema-protocol-2.0.xsd', $response4->getError());
+        $this->assertEquals('Invalid SAML Response. Not match the eidlogin.xsd', $response4->getError());
     }
 
     /**
