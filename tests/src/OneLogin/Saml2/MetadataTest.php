@@ -247,8 +247,9 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
 
         $certPath = $settings->getCertPath();
         $cert = file_get_contents($certPath.'sp.crt');
+        $certEnc = file_get_contents($certPath.'sp.crtEnc');
 
-        $metadataWithDescriptors = Metadata::addX509KeyDescriptors($metadata, $cert);
+        $metadataWithDescriptors = Metadata::addX509KeyDescriptors($metadata, $cert, $certEnc);
 
         $this->assertStringContainsString('<md:KeyDescriptor use="signing"', $metadataWithDescriptors);
         $this->assertStringContainsString('<md:KeyDescriptor use="encryption"', $metadataWithDescriptors);
@@ -258,7 +259,7 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
         $this->assertStringContainsString('<md:KeyDescriptor use="signing"', $metadataWithDescriptors);
         $this->assertStringNotContainsString('<md:KeyDescriptor use="encryption"', $metadataWithDescriptors);
 
-        $metadataWithDescriptors = Metadata::addX509KeyDescriptors($metadata, $cert, 'foobar');
+        $metadataWithDescriptors = Metadata::addX509KeyDescriptors($metadata, $cert, $certEnc, 'foobar');
 
         $this->assertStringContainsString('<md:KeyDescriptor use="signing"', $metadataWithDescriptors);
         $this->assertStringNotContainsString('<md:KeyDescriptor use="encryption"', $metadataWithDescriptors);
@@ -302,6 +303,7 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
 
         $certPath = $settings->getCertPath();
         $cert = file_get_contents($certPath.'sp.crt');
+        $certEnc = file_get_contents($certPath.'sp.crtEnc');
 
         $metadata = Metadata::addX509KeyDescriptors($metadata, $cert, false);
 
@@ -314,7 +316,7 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
 
         $metadata2 = Metadata::builder($spData);
 
-        $metadata2 = Metadata::addX509KeyDescriptors($metadata2, $cert);
+        $metadata2 = Metadata::addX509KeyDescriptors($metadata2, $cert, $certEnc);
 
         $this->assertEquals(2, substr_count($metadata2, "<md:KeyDescriptor"));
 
@@ -322,7 +324,7 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
 
         $this->assertEquals(1, substr_count($metadata2, '<md:KeyDescriptor use="encryption"'));
 
-        $metadata2 = Metadata::addX509KeyDescriptors($metadata2, $cert);
+        $metadata2 = Metadata::addX509KeyDescriptors($metadata2, $cert, $certEnc);
 
         $this->assertEquals(4, substr_count($metadata2, "<md:KeyDescriptor"));
 
