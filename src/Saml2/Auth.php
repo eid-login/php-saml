@@ -592,16 +592,15 @@ class Auth
      * @param bool        $stay            True if we want to stay (returns the url string) False to redirect
      * @param bool        $setNameIdPolicy When true the AuthNRequest will set a nameIdPolicy element
      * @param string      $nameIdValueReq  Indicates to the IdP the subject that should be authenticated
-     * @param string      $reqId           The id of the request to create
      *
      * @return string|null If $stay is True, it return a string with the SLO URL + LogoutRequest + parameters
      * @phpstan-return ($stay is true ? string : never)
      *
      * @throws Error
      */
-    public function login($returnTo = null, array $parameters = array(), $forceAuthn = false, $isPassive = false, $stay = false, $setNameIdPolicy = true, $nameIdValueReq = null, $reqId = null)
+    public function login($returnTo = null, array $parameters = array(), $forceAuthn = false, $isPassive = false, $stay = false, $setNameIdPolicy = true, $nameIdValueReq = null)
     {
-        $authnRequest = $this->buildAuthnRequest($this->_settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq, $reqId);
+        $authnRequest = $this->buildAuthnRequest($this->_settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq);
 
         $this->_lastRequest = $authnRequest->getXML();
         $this->_lastRequestID = $authnRequest->getId();
@@ -730,13 +729,12 @@ class Auth
      * @param bool     $isPassive       When true the AuthNRequest will set the Ispassive='true'
      * @param bool     $setNameIdPolicy When true the AuthNRequest will set a nameIdPolicy element
      * @param string   $nameIdValueReq  Indicates to the IdP the subject that should be authenticated
-     * @param string   $reqId           The id of the request to create
      *
      * @return AuthnRequest The AuthnRequest object
      */
-    public function buildAuthnRequest(Settings $settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq = null, $reqId)
+    public function buildAuthnRequest(Settings $settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq = null)
     {
-        return new AuthnRequest($settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq, $reqId);
+        return new AuthnRequest($settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq);
     }
 
     /**
