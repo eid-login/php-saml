@@ -51,15 +51,19 @@ class AuthnRequest
      * @param bool $isPassive When true the AuthNReuqest will set the Ispassive='true'
      * @param bool $setNameIdPolicy When true the AuthNReuqest will set a nameIdPolicy
      * @param string $nameIdValueReq Indicates to the IdP the subject that should be authenticated
+     * @param string $id The id of the request to create
      */
-    public function __construct(\OneLogin\Saml2\Settings $settings, $forceAuthn = false, $isPassive = false, $setNameIdPolicy = true, $nameIdValueReq = null)
+    public function __construct(\OneLogin\Saml2\Settings $settings, $forceAuthn = false, $isPassive = false, $setNameIdPolicy = true, $nameIdValueReq = null, $id = null)
     {
         $this->_settings = $settings;
+        if ($id === null) {
+            $id = Utils::generateUniqueID();
+        }
+        $this->_id = $id;
 
         $spData = $this->_settings->getSPData();
         $security = $this->_settings->getSecurityData();
 
-        $id = Utils::generateUniqueID();
         $issueInstant = Utils::parseTime2SAML(time());
 
         $subjectStr = "";
