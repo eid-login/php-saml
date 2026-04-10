@@ -734,7 +734,7 @@ class Auth
      *
      * @return AuthnRequest The AuthnRequest object
      */
-    public function buildAuthnRequest(Settings $settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq = null, $reqId)
+    public function buildAuthnRequest(Settings $settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq = null, $reqId = null)
     {
         return new AuthnRequest($settings, $forceAuthn, $isPassive, $setNameIdPolicy, $nameIdValueReq, $reqId);
     }
