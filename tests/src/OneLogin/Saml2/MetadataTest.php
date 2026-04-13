@@ -52,6 +52,7 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
         $this->assertStringContainsString('<md:OrganizationName xml:lang="en-US">sp_test</md:OrganizationName>', $metadata);
         $this->assertStringContainsString('<md:ContactPerson contactType="technical">', $metadata);
         $this->assertStringContainsString('<md:GivenName>technical_name</md:GivenName>', $metadata);
+        $this->assertStringContainsString('validUntil', $metadata);
 
         $security['authnRequestsSigned'] = true;
         $security['wantAssertionsSigned'] = true;
@@ -66,6 +67,9 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
 
         $this->assertStringNotContainsString('<md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"', $metadata2);
         $this->assertStringNotContainsString(' Location="http://stuff.com/endpoints/endpoints/sls.php"/>', $metadata2);
+
+        $metadata3 = Metadata::builder($spData, $security['authnRequestsSigned'], $security['wantAssertionsSigned'], null, null, $contacts, $organization, array(), true);
+        $this->assertStringNotContainsString('validUntil=', $metadata3);
     }
 
     /**
@@ -165,8 +169,9 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
         try {
             $signedMetadata2 = Metadata::signMetadata('', $key, $cert);
             $this->fail('Exception was not raised');
-        } catch (\Error $e) {
-            $this->assertStringContainsString('Argument #1 ($source) must not be empty', $e->getMessage());
+        } catch (\Error | \Exception $e) {
+            $expectedErrors = array('DOMDocument::loadXML(): Argument #1 ($source) must not be empty', 'DOMDocument::loadXML(): Empty string supplied as input');
+            $this->assertTrue(in_array($e->getMessage(), $expectedErrors));
         }
     }
 
@@ -242,8 +247,9 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
 
         $certPath = $settings->getCertPath();
         $cert = file_get_contents($certPath.'sp.crt');
+        $certEnc = file_get_contents($certPath.'sp.crtEnc');
 
-        $metadataWithDescriptors = Metadata::addX509KeyDescriptors($metadata, $cert);
+        $metadataWithDescriptors = Metadata::addX509KeyDescriptors($metadata, $cert, $certEnc);
 
         $this->assertStringContainsString('<md:KeyDescriptor use="signing"', $metadataWithDescriptors);
         $this->assertStringContainsString('<md:KeyDescriptor use="encryption"', $metadataWithDescriptors);
@@ -253,7 +259,7 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
         $this->assertStringContainsString('<md:KeyDescriptor use="signing"', $metadataWithDescriptors);
         $this->assertStringNotContainsString('<md:KeyDescriptor use="encryption"', $metadataWithDescriptors);
 
-        $metadataWithDescriptors = Metadata::addX509KeyDescriptors($metadata, $cert, 'foobar');
+        $metadataWithDescriptors = Metadata::addX509KeyDescriptors($metadata, $cert, $certEnc, 'foobar');
 
         $this->assertStringContainsString('<md:KeyDescriptor use="signing"', $metadataWithDescriptors);
         $this->assertStringNotContainsString('<md:KeyDescriptor use="encryption"', $metadataWithDescriptors);
@@ -261,8 +267,9 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
         try {
             $signedMetadata2 = Metadata::addX509KeyDescriptors('', $cert);
             $this->fail('Exception was not raised');
-        } catch (\Error $e) {
-            $this->assertStringContainsString('Argument #1 ($source) must not be empty', $e->getMessage());
+        } catch (\Error | \Exception $e) {
+            $expectedErrors = array('DOMDocument::loadXML(): Argument #1 ($source) must not be empty', 'Error parsing metadata. DOMDocument::loadXML(): Empty string supplied as input');
+            $this->assertTrue(in_array($e->getMessage(), $expectedErrors));
         }
 
         libxml_use_internal_errors(true);
@@ -296,6 +303,7 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
 
         $certPath = $settings->getCertPath();
         $cert = file_get_contents($certPath.'sp.crt');
+        $certEnc = file_get_contents($certPath.'sp.crtEnc');
 
         $metadata = Metadata::addX509KeyDescriptors($metadata, $cert, false);
 
@@ -308,7 +316,7 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
 
         $metadata2 = Metadata::builder($spData);
 
-        $metadata2 = Metadata::addX509KeyDescriptors($metadata2, $cert);
+        $metadata2 = Metadata::addX509KeyDescriptors($metadata2, $cert, $certEnc);
 
         $this->assertEquals(2, substr_count($metadata2, "<md:KeyDescriptor"));
 
@@ -316,7 +324,7 @@ class MetadataTest extends \PHPUnit\Framework\TestCase
 
         $this->assertEquals(1, substr_count($metadata2, '<md:KeyDescriptor use="encryption"'));
 
-        $metadata2 = Metadata::addX509KeyDescriptors($metadata2, $cert);
+        $metadata2 = Metadata::addX509KeyDescriptors($metadata2, $cert, $certEnc);
 
         $this->assertEquals(4, substr_count($metadata2, "<md:KeyDescriptor"));
 

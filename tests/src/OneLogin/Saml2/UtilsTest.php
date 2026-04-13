@@ -31,8 +31,12 @@ class UtilsTest extends \PHPUnit\Framework\TestCase
         $dom = new DOMDocument();
 
         $metadataUnloaded = '<xml><EntityDescriptor>';
-        $res1 = Utils::loadXML($dom, $metadataUnloaded);
-        $this->assertFalse($res1);
+        try {
+            $res1 = Utils::loadXML($dom, $metadataUnloaded);
+            $this->assertFalse($res1);
+        } catch (\Exception $e) {
+            $this->assertEquals('DOMDocument::loadXML(): Premature end of data in tag EntityDescriptor line 1 in Entity, line: 1', $e->getMessage());
+        }
 
         $metadataInvalid = file_get_contents(TEST_ROOT .'/data/metadata/noentity_metadata_settings1.xml');
         $res2 = Utils::loadXML($dom, $metadataInvalid);
@@ -53,7 +57,7 @@ class UtilsTest extends \PHPUnit\Framework\TestCase
         $dom = new DOMDocument();
 
         $attackXXE = '<?xml version="1.0" encoding="ISO-8859-1"?>
-                      <!DOCTYPE foo [  
+                      <!DOCTYPE foo [
                       <!ELEMENT foo ANY >
                       <!ENTITY xxe SYSTEM "file:///etc/passwd" >]><foo>&xxe;</foo>';
         try {
@@ -190,6 +194,11 @@ class UtilsTest extends \PHPUnit\Framework\TestCase
         $this->assertStringNotContainsString('-----END CERTIFICATE-----', $formatedCert6);
         $this->assertEquals(strlen($cert2), 860);
 
+        $cert = file_get_contents(TEST_ROOT.'/certs/with.comment.crt');
+        $formatedCert7 = Utils::formatCert($cert, true);
+        $this->assertStringContainsString('-----BEGIN CERTIFICATE-----', $formatedCert7);
+        $this->assertStringContainsString('-----END CERTIFICATE-----', $formatedCert7);
+        $this->assertStringNotContainsString('comments', $formatedCert7);
     }
 
     /**
@@ -451,6 +460,9 @@ class UtilsTest extends \PHPUnit\Framework\TestCase
     {
         $this->assertNull(Utils::getBaseURLPath());
 
+        Utils::setBaseURLPath('/');
+        $this->assertEquals('/', Utils::getBaseURLPath());
+
         Utils::setBaseURLPath('sp');
         $this->assertEquals('/sp/', Utils::getBaseURLPath());
 
@@ -462,6 +474,25 @@ class UtilsTest extends \PHPUnit\Framework\TestCase
 
         Utils::setBaseURLPath('/sp/');
         $this->assertEquals('/sp/', Utils::getBaseURLPath());
+    }
+
+    /**
+     * @covers OneLogin\Saml2\Utils::setBaseURLPath
+     */
+    public function testSetBaseURLPath2()
+    {
+        $_SERVER['HTTP_HOST'] = 'sp.example.com';
+        $_SERVER['HTTPS'] = 'https';
+        $_SERVER['REQUEST_URI'] = null;
+        $_SERVER['QUERY_STRING'] = null;
+        $_SERVER['SCRIPT_NAME'] = '/';
+        unset($_SERVER['PATH_INFO']);
+
+        Utils::setBaseURLPath('/');
+        $this->assertEquals("https://sp.example.com/", Utils::getSelfURLNoQuery());
+        $this->assertEquals("https://sp.example.com/", Utils::getSelfRoutedURLNoQuery());
+        $this->assertEquals("https://sp.example.com/", Utils::getSelfURL());
+        $this->assertEquals('/', Utils::getBaseURLPath());
     }
 
     /**
@@ -494,9 +525,9 @@ class UtilsTest extends \PHPUnit\Framework\TestCase
         $this->assertEquals($expectedUrl, Utils::getSelfURL());
 
         Utils::setBaseURL("http://anothersp.example.com:81/example2/");
-        $expectedUrlNQ2 = 'http://anothersp.example.com:81/example2/route.php';
-        $expectedRoutedUrlNQ2 = 'http://anothersp.example.com:81/example2/route.php';
-        $expectedUrl2 = 'http://anothersp.example.com:81/example2/route.php?x=test';
+        $expectedUrlNQ2 = 'http://anothersp.example.com:81/example2/example1/route.php';
+        $expectedRoutedUrlNQ2 = 'http://anothersp.example.com:81/example2/example1/route.php';
+        $expectedUrl2 = 'http://anothersp.example.com:81/example2/example1/route.php?x=test';
 
         $this->assertEquals('http', Utils::getSelfProtocol());
         $this->assertEquals('anothersp.example.com', Utils::getSelfHost());
@@ -508,11 +539,53 @@ class UtilsTest extends \PHPUnit\Framework\TestCase
         $this->assertEquals($expectedUrl2, Utils::getSelfURL());
 
         $_SERVER['PATH_INFO'] = '/test';
-        $expectedUrlNQ2 = 'http://anothersp.example.com:81/example2/route.php/test';
+        $expectedUrlNQ2 = 'http://anothersp.example.com:81/example2/example1/route.php/test';
 
         $this->assertEquals($expectedUrlNQ2, Utils::getSelfURLNoQuery());
         $this->assertEquals($expectedRoutedUrlNQ2, Utils::getSelfRoutedURLNoQuery());
         $this->assertEquals($expectedUrl2, Utils::getSelfURL());
+    }
+
+   /**
+     * @covers OneLogin\Saml2\Utils::setBaseURL
+     */
+    public function testSetBaseURL2()
+    {
+        $_SERVER['HTTP_HOST'] = 'sp.example.com';
+        $_SERVER['HTTPS'] = 'https';
+        $_SERVER['REQUEST_URI'] = null;
+        $_SERVER['QUERY_STRING'] = null;
+        $_SERVER['SCRIPT_NAME'] = '/';
+        unset($_SERVER['PATH_INFO']);
+
+        Utils::setBaseURL('https://sp.example.com');
+        $this->assertEquals("https://sp.example.com/", Utils::getSelfURLNoQuery());
+        $this->assertEquals("https://sp.example.com/", Utils::getSelfRoutedURLNoQuery());
+        $this->assertEquals("https://sp.example.com/", Utils::getSelfURL());
+        $this->assertEquals('/', Utils::getBaseURLPath());
+
+        $_SERVER['REQUEST_URI'] = '/example1/path/route.php?x=test';
+        $_SERVER['QUERY_STRING'] = '?x=test';
+        $_SERVER['SCRIPT_NAME'] = '/example1/path/route.php';
+        $this->assertEquals("https://sp.example.com/example1/path/route.php", Utils::getSelfURLNoQuery());
+        $this->assertEquals("https://sp.example.com/example1/path/route.php", Utils::getSelfRoutedURLNoQuery());
+        $this->assertEquals("https://sp.example.com/example1/path/route.php?x=test", Utils::getSelfURL());
+        $this->assertEquals('/', Utils::getBaseURLPath());
+
+        Utils::setBaseURLPath('/example1/path/');
+        $this->assertEquals("https://sp.example.com/example1/path/route.php", Utils::getSelfURLNoQuery());
+        $this->assertEquals("https://sp.example.com/example1/path/route.php", Utils::getSelfRoutedURLNoQuery());
+        $this->assertEquals("https://sp.example.com/example1/path/route.php?x=test", Utils::getSelfURL());
+        $this->assertEquals('/example1/path/', Utils::getBaseURLPath());
+
+        $_SERVER['REQUEST_URI'] = '/example1/path/route/?x=test';
+        $_SERVER['QUERY_STRING'] = '?x=test';
+        $_SERVER['SCRIPT_NAME'] = '/example1/path/route';
+        $this->assertEquals("https://sp.example.com/example1/path/route", Utils::getSelfURLNoQuery());
+        $this->assertEquals("https://sp.example.com/example1/path/route", Utils::getSelfRoutedURLNoQuery());
+        $this->assertEquals("https://sp.example.com/example1/path/route/?x=test", Utils::getSelfURL());
+        $this->assertEquals('/example1/path/', Utils::getBaseURLPath());
+
     }
 
     /**
@@ -723,7 +796,7 @@ class UtilsTest extends \PHPUnit\Framework\TestCase
             $this->assertStringContainsString('Invalid SAML2 timestamp passed', $e->getMessage());
         }
 
-        // Now test if toolkit supports miliseconds
+        // Now test if toolkit supports milliseconds
         $SAMLTime2 = '2013-12-10T04:39:31.120Z';
         $this->assertEquals($time, Utils::parseSAML2Time($SAMLTime2));
     }
@@ -851,13 +924,14 @@ class UtilsTest extends \PHPUnit\Framework\TestCase
             $key
         );
 
-        $nameidExpectedEnc = '<saml:EncryptedID><xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#" xmlns:dsig="http://www.w3.org/2000/09/xmldsig#" Type="http://www.w3.org/2001/04/xmlenc#Element"><xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/><dsig:KeyInfo xmlns:dsig="http://www.w3.org/2000/09/xmldsig#"><xenc:EncryptedKey><xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/><xenc:CipherData><xenc:CipherValue>';
+        $nameidExpectedEncId = '<saml:EncryptedID><xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#"';
+        $nameidExpectedEncData = '<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/><dsig:KeyInfo xmlns:dsig="http://www.w3.org/2000/09/xmldsig#"><xenc:EncryptedKey><xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/><xenc:CipherData><xenc:CipherValue>';
 
-        $this->assertStringContainsString($nameidExpectedEnc, $nameIdEnc);
+        $this->assertStringContainsString($nameidExpectedEncId, $nameIdEnc);
+        $this->assertStringContainsString($nameidExpectedEncData, $nameIdEnc);
 
         // Check AES128_GCM support
-
-        $nameidExpectedEnc = '<saml:EncryptedID><xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#" xmlns:dsig="http://www.w3.org/2000/09/xmldsig#" Type="http://www.w3.org/2001/04/xmlenc#Element"><xenc:EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#aes128-gcm"/><dsig:KeyInfo xmlns:dsig="http://www.w3.org/2000/09/xmldsig#"><xenc:EncryptedKey><xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p"/><xenc:CipherData><xenc:CipherValue>';
+        $nameidExpectedEncData = '<xenc:EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#aes128-gcm"/><dsig:KeyInfo xmlns:dsig="http://www.w3.org/2000/09/xmldsig#"><xenc:EncryptedKey><xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p"/><xenc:CipherData><xenc:CipherValue>';
 
         $nameIdEnc = Utils::generateNameId(
             $nameIdValue,
@@ -867,7 +941,8 @@ class UtilsTest extends \PHPUnit\Framework\TestCase
             null,
             XMLSecurityKey::AES128_GCM
         );
-        $this->assertStringContainsString($nameidExpectedEnc, $nameIdEnc);
+        $this->assertStringContainsString($nameidExpectedEncId, $nameIdEnc);
+        $this->assertStringContainsString($nameidExpectedEncData, $nameIdEnc);
     }
 
     /**
@@ -924,8 +999,11 @@ class UtilsTest extends \PHPUnit\Framework\TestCase
             $key
         );
 
-        $nameidExpectedEnc = '<saml:EncryptedID><xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#" xmlns:dsig="http://www.w3.org/2000/09/xmldsig#" Type="http://www.w3.org/2001/04/xmlenc#Element"><xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/><dsig:KeyInfo xmlns:dsig="http://www.w3.org/2000/09/xmldsig#"><xenc:EncryptedKey><xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/><xenc:CipherData><xenc:CipherValue>';
-        $this->assertStringContainsString($nameidExpectedEnc, $nameIdEnc);
+        $nameidExpectedEncId = '<saml:EncryptedID><xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#"';
+        $nameidExpectedEncData = '<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/><dsig:KeyInfo xmlns:dsig="http://www.w3.org/2000/09/xmldsig#"><xenc:EncryptedKey><xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/><xenc:CipherData><xenc:CipherValue>';
+
+        $this->assertStringContainsString($nameidExpectedEncId, $nameIdEnc);
+        $this->assertStringContainsString($nameidExpectedEncData, $nameIdEnc);
     }
 
     /**
@@ -1272,6 +1350,434 @@ class UtilsTest extends \PHPUnit\Framework\TestCase
             $this->fail('Exception was not raised');
         } catch (Exception $e) {
             $this->assertStringContainsString('Reference validation failed', $e->getMessage());
+        }
+    }
+
+    /**
+     * Tests the validateBinarySign method of the Utils
+     *
+     * @covers OneLogin\Saml2\Utils::validateSign
+     */
+    public function testValidateBinarySignIsValid()
+    {
+        $settingsDir = TEST_ROOT .'/settings/';
+        include $settingsDir.'settings1.php';
+
+        $settings = new Settings($settingsInfo);
+        $idpData = $settings->getIdPData();
+
+        unset($_SERVER['QUERY_STRING']);
+        $getData = array(
+            'SAMLRequest' => 'fZJNa+MwEIb/ivHdiTyyZEskhkJYCPQDtmUPvQRZHm8NtqRKMuTnr2J3IbuHXsQwM887My86BDVPTj7a33aJP/FzwRCz6zyZINfKMV+8kVaFMUijZgwyavn68PQoYUek8zZabaf8DvmeUCGgj6M1eXY+HfOLILwHVQ+MK1ozrBG7itQcKzpQ3pQCdDU0DdQIefYLfUjkMU9CCQ9hwbMJUZmYUqSsCkILIG8ll8Alg/c8O6VrRqPiSn3E6OR+H+IyDDtt5z2a3tnRxHAXhSns3IfLs2cbX8yLfxgi+iQvBC2IKKB8g1JWm3x7uN0r10V8+yU/9m6HVzW7Cdchh/1900Y8J1vOp+yH9bOK3/t1y4x9MaytMnplwogm5u1l6KDrgUHFGeVEU92xUlCkrOZMNITr9LIUdvprhW3qtoKTrxhuZp5Nj9f2gn0D0IPQyfnkPlOEQpO0uko1DDSBqqtEl+aITew//m/yn2/U/gE=',
+            'RelayState' => '_1037fbc88ec82ce8e770b2bed1119747bb812a07e6',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'L2YrP7Ngms1ew8va4drALt9bjK4ZInIS8V6W3HUSlvW/Hw2VD93vy1jPdDBsrRt8cLIuAkkHatemiq1bbgWyrGqlbX5VA/klRYJvHVowfUh2vuf8s17bdFWUOlsTWXxKaA2lJl93MnzJQsZrfVeCqJrcTsSFlYYbcqr/g5Kdcgg='
+        );
+        $retrieveParametersFromServer = false;
+        $messageType = 'SAMLRequest';
+        $this->assertTrue(Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer));
+
+        $retrieveParametersFromServer = true;
+        $_SERVER['QUERY_STRING'] = 'SAMLRequest=' . urlencode('fZJNa+MwEIb/ivHdiTyyZEskhkJYCPQDtmUPvQRZHm8NtqRKMuTnr2J3IbuHXsQwM887My86BDVPTj7a33aJP/FzwRCz6zyZINfKMV+8kVaFMUijZgwyavn68PQoYUek8zZabaf8DvmeUCGgj6M1eXY+HfOLILwHVQ+MK1ozrBG7itQcKzpQ3pQCdDU0DdQIefYLfUjkMU9CCQ9hwbMJUZmYUqSsCkILIG8ll8Alg/c8O6VrRqPiSn3E6OR+H+IyDDtt5z2a3tnRxHAXhSns3IfLs2cbX8yLfxgi+iQvBC2IKKB8g1JWm3x7uN0r10V8+yU/9m6HVzW7Cdchh/1900Y8J1vOp+yH9bOK3/t1y4x9MaytMnplwogm5u1l6KDrgUHFGeVEU92xUlCkrOZMNITr9LIUdvprhW3qtoKTrxhuZp5Nj9f2gn0D0IPQyfnkPlOEQpO0uko1DDSBqqtEl+aITew//m/yn2/U/gE='). '&RelayState='.urlencode('_1037fbc88ec82ce8e770b2bed1119747bb812a07e6') . '&SigAlg='.urlencode('http://www.w3.org/2000/09/xmldsig#rsa-sha1').'&Signature=' . urlencode('L2YrP7Ngms1ew8va4drALt9bjK4ZInIS8V6W3HUSlvW/Hw2VD93vy1jPdDBsrRt8cLIuAkkHatemiq1bbgWyrGqlbX5VA/klRYJvHVowfUh2vuf8s17bdFWUOlsTWXxKaA2lJl93MnzJQsZrfVeCqJrc');
+        $this->assertTrue(Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer));
+
+        unset($_SERVER['QUERY_STRING']);
+        $getData2 = array(
+            'SAMLResponse' => 'fZJva8IwEMa/Ssl7TZrW/gnqGHMMwSlM8cXeyLU9NaxNQi9lfvxVZczB5ptwSe733MPdjQma2qmFPdjOvyE5awiDU1MbUpevCetaoyyQJmWgQVK+VOvH14WSQ6Fca70tbc1ukPsEEGHrtTUsmM8mbDfKUhnFci8gliGINI/yXIAAiYnsw6JIRgWWAKlkwRZb6skJ64V6nKjDuSEPxvdPIowHIhpIsQkTFaYqSt9ZMEPy2oC/UEfvHSnOnfZFV38MjR1oN7TtgRv8tAZre9CGV9jYkGtT4Wnoju6Bauprme/ebOyErZbPi9XLfLnDoohwhHGc5WVSVhjCKM6rBMpYQpWJrIizfZ4IZNPxuTPqYrmd/m+EdONqPOfy8yG5rhxv0EMFHs52xvxWaHyd3tqD7+j37clWGGyh7vD+POiSrdZdWSIR49NrhR9R/teGTL8A',
+            'RelayState' => 'https://pitbulk.no-ip.org/newonelogin/demo1/index.php',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'vfWbbc47PkP3ejx4bjKsRX7lo9Ml1WRoE5J5owF/0mnyKHfSY6XbhO1wwjBV5vWdrUVX+xp6slHyAf4YoAsXFS0qhan6txDiZY4Oec6yE+l10iZbzvie06I4GPak4QrQ4gAyXOSzwCrRmJu4gnpeUxZ6IqKtdrKfAYRAcVfNKGA='
+        );
+        $retrieveParametersFromServer = false;
+        $messageType = 'SAMLResponse';
+        $this->assertTrue(Utils::validateBinarySign($messageType, $getData2, $idpData, $retrieveParametersFromServer));
+
+        $retrieveParametersFromServer = true;
+        $_SERVER['QUERY_STRING'] = 'SAMLResponse='.urlencode('fZJva8IwEMa/Ssl7TZrW/gnqGHMMwSlM8cXeyLU9NaxNQi9lfvxVZczB5ptwSe733MPdjQma2qmFPdjOvyE5awiDU1MbUpevCetaoyyQJmWgQVK+VOvH14WSQ6Fca70tbc1ukPsEEGHrtTUsmM8mbDfKUhnFci8gliGINI/yXIAAiYnsw6JIRgWWAKlkwRZb6skJ64V6nKjDuSEPxvdPIowHIhpIsQkTFaYqSt9ZMEPy2oC/UEfvHSnOnfZFV38MjR1oN7TtgRv8tAZre9CGV9jYkGtT4Wnoju6Bauprme/ebOyErZbPi9XLfLnDoohwhHGc5WVSVhjCKM6rBMpYQpWJrIizfZ4IZNPxuTPqYrmd/m+EdONqPOfy8yG5rhxv0EMFHs52xvxWaHyd3tqD7+j37clWGGyh7vD+POiSrdZdWSIR49NrhR9R/teGTL8A').'&RelayState='.urlencode('https://pitbulk.no-ip.org/newonelogin/demo1/index.php').'&SigAlg='.urlencode('http://www.w3.org/2000/09/xmldsig#rsa-sha1').'&Signature='.urlencode('vfWbbc47PkP3ejx4bjKsRX7lo9Ml1WRoE5J5owF/0mnyKHfSY6XbhO1wwjBV5vWdrUVX+xp6slHyAf4YoAsXFS0qhan6txDiZY4Oec6yE+l10iZbzvie06I4GPak4QrQ4gAyXOSzwCrRmJu4gnpeUxZ6IqKtdrKfAYRAcVfNKGA=');
+        $this->assertTrue(Utils::validateBinarySign($messageType, $getData2, $idpData, $retrieveParametersFromServer));
+    }
+
+    /**
+     * Tests the validateBinarySign method of the Utils
+     *
+     * @covers OneLogin\Saml2\Utils::validateSign
+     */
+    public function testValidateBinarySignIsValidx509certMulti()
+    {
+        $settingsDir = TEST_ROOT .'/settings/';
+        include $settingsDir.'settings6.php';
+
+        $settings = new Settings($settingsInfo);
+        $idpData = $settings->getIdPData();
+
+        unset($_SERVER['QUERY_STRING']);
+        $getData = array(
+            'SAMLRequest' => 'fZJNa+MwEIb/ivHdiTyyZEskhkJYCPQDtmUPvQRZHm8NtqRKMuTnr2J3IbuHXsQwM887My86BDVPTj7a33aJP/FzwRCz6zyZINfKMV+8kVaFMUijZgwyavn68PQoYUek8zZabaf8DvmeUCGgj6M1eXY+HfOLILwHVQ+MK1ozrBG7itQcKzpQ3pQCdDU0DdQIefYLfUjkMU9CCQ9hwbMJUZmYUqSsCkILIG8ll8Alg/c8O6VrRqPiSn3E6OR+H+IyDDtt5z2a3tnRxHAXhSns3IfLs2cbX8yLfxgi+iQvBC2IKKB8g1JWm3x7uN0r10V8+yU/9m6HVzW7Cdchh/1900Y8J1vOp+yH9bOK3/t1y4x9MaytMnplwogm5u1l6KDrgUHFGeVEU92xUlCkrOZMNITr9LIUdvprhW3qtoKTrxhuZp5Nj9f2gn0D0IPQyfnkPlOEQpO0uko1DDSBqqtEl+aITew//m/yn2/U/gE=',
+            'RelayState' => '_1037fbc88ec82ce8e770b2bed1119747bb812a07e6',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'L2YrP7Ngms1ew8va4drALt9bjK4ZInIS8V6W3HUSlvW/Hw2VD93vy1jPdDBsrRt8cLIuAkkHatemiq1bbgWyrGqlbX5VA/klRYJvHVowfUh2vuf8s17bdFWUOlsTWXxKaA2lJl93MnzJQsZrfVeCqJrcTsSFlYYbcqr/g5Kdcgg='
+        );
+        $retrieveParametersFromServer = false;
+        $messageType = 'SAMLRequest';
+        $this->assertTrue(Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer));
+
+        $retrieveParametersFromServer = true;
+        $_SERVER['QUERY_STRING'] = 'SAMLRequest=' . urlencode('fZJNa+MwEIb/ivHdiTyyZEskhkJYCPQDtmUPvQRZHm8NtqRKMuTnr2J3IbuHXsQwM887My86BDVPTj7a33aJP/FzwRCz6zyZINfKMV+8kVaFMUijZgwyavn68PQoYUek8zZabaf8DvmeUCGgj6M1eXY+HfOLILwHVQ+MK1ozrBG7itQcKzpQ3pQCdDU0DdQIefYLfUjkMU9CCQ9hwbMJUZmYUqSsCkILIG8ll8Alg/c8O6VrRqPiSn3E6OR+H+IyDDtt5z2a3tnRxHAXhSns3IfLs2cbX8yLfxgi+iQvBC2IKKB8g1JWm3x7uN0r10V8+yU/9m6HVzW7Cdchh/1900Y8J1vOp+yH9bOK3/t1y4x9MaytMnplwogm5u1l6KDrgUHFGeVEU92xUlCkrOZMNITr9LIUdvprhW3qtoKTrxhuZp5Nj9f2gn0D0IPQyfnkPlOEQpO0uko1DDSBqqtEl+aITew//m/yn2/U/gE='). '&RelayState='.urlencode('_1037fbc88ec82ce8e770b2bed1119747bb812a07e6') . '&SigAlg='.urlencode('http://www.w3.org/2000/09/xmldsig#rsa-sha1').'&Signature=' . urlencode('L2YrP7Ngms1ew8va4drALt9bjK4ZInIS8V6W3HUSlvW/Hw2VD93vy1jPdDBsrRt8cLIuAkkHatemiq1bbgWyrGqlbX5VA/klRYJvHVowfUh2vuf8s17bdFWUOlsTWXxKaA2lJl93MnzJQsZrfVeCqJrc');
+        $this->assertTrue(Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer));
+
+        unset($_SERVER['QUERY_STRING']);
+        $getData2 = array(
+            'SAMLResponse' => 'fZJva8IwEMa/Ssl7TZrW/gnqGHMMwSlM8cXeyLU9NaxNQi9lfvxVZczB5ptwSe733MPdjQma2qmFPdjOvyE5awiDU1MbUpevCetaoyyQJmWgQVK+VOvH14WSQ6Fca70tbc1ukPsEEGHrtTUsmM8mbDfKUhnFci8gliGINI/yXIAAiYnsw6JIRgWWAKlkwRZb6skJ64V6nKjDuSEPxvdPIowHIhpIsQkTFaYqSt9ZMEPy2oC/UEfvHSnOnfZFV38MjR1oN7TtgRv8tAZre9CGV9jYkGtT4Wnoju6Bauprme/ebOyErZbPi9XLfLnDoohwhHGc5WVSVhjCKM6rBMpYQpWJrIizfZ4IZNPxuTPqYrmd/m+EdONqPOfy8yG5rhxv0EMFHs52xvxWaHyd3tqD7+j37clWGGyh7vD+POiSrdZdWSIR49NrhR9R/teGTL8A',
+            'RelayState' => 'https://pitbulk.no-ip.org/newonelogin/demo1/index.php',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'vfWbbc47PkP3ejx4bjKsRX7lo9Ml1WRoE5J5owF/0mnyKHfSY6XbhO1wwjBV5vWdrUVX+xp6slHyAf4YoAsXFS0qhan6txDiZY4Oec6yE+l10iZbzvie06I4GPak4QrQ4gAyXOSzwCrRmJu4gnpeUxZ6IqKtdrKfAYRAcVfNKGA='
+        );
+        $retrieveParametersFromServer = false;
+        $messageType = 'SAMLResponse';
+        $this->assertTrue(Utils::validateBinarySign($messageType, $getData2, $idpData, $retrieveParametersFromServer));
+
+        $retrieveParametersFromServer = true;
+        $_SERVER['QUERY_STRING'] = 'SAMLResponse='.urlencode('fZJva8IwEMa/Ssl7TZrW/gnqGHMMwSlM8cXeyLU9NaxNQi9lfvxVZczB5ptwSe733MPdjQma2qmFPdjOvyE5awiDU1MbUpevCetaoyyQJmWgQVK+VOvH14WSQ6Fca70tbc1ukPsEEGHrtTUsmM8mbDfKUhnFci8gliGINI/yXIAAiYnsw6JIRgWWAKlkwRZb6skJ64V6nKjDuSEPxvdPIowHIhpIsQkTFaYqSt9ZMEPy2oC/UEfvHSnOnfZFV38MjR1oN7TtgRv8tAZre9CGV9jYkGtT4Wnoju6Bauprme/ebOyErZbPi9XLfLnDoohwhHGc5WVSVhjCKM6rBMpYQpWJrIizfZ4IZNPxuTPqYrmd/m+EdONqPOfy8yG5rhxv0EMFHs52xvxWaHyd3tqD7+j37clWGGyh7vD+POiSrdZdWSIR49NrhR9R/teGTL8A').'&RelayState='.urlencode('https://pitbulk.no-ip.org/newonelogin/demo1/index.php').'&SigAlg='.urlencode('http://www.w3.org/2000/09/xmldsig#rsa-sha1').'&Signature='.urlencode('vfWbbc47PkP3ejx4bjKsRX7lo9Ml1WRoE5J5owF/0mnyKHfSY6XbhO1wwjBV5vWdrUVX+xp6slHyAf4YoAsXFS0qhan6txDiZY4Oec6yE+l10iZbzvie06I4GPak4QrQ4gAyXOSzwCrRmJu4gnpeUxZ6IqKtdrKfAYRAcVfNKGA=');
+        $this->assertTrue(Utils::validateBinarySign($messageType, $getData2, $idpData, $retrieveParametersFromServer));
+    }
+
+    /**
+     * Tests the validateBinarySign method of the Utils
+     * Case where the signature is wrong 
+     * 
+     * @covers OneLogin\Saml2\Utils::validateSign
+     */
+    public function testValidateBinarySignSignatureWrong()
+    {
+        $settingsDir = TEST_ROOT .'/settings/';
+        include $settingsDir.'settings1.php';
+
+        $settings = new Settings($settingsInfo);
+        $idpData = $settings->getIdPData();
+
+        unset($_SERVER['QUERY_STRING']);
+        $getData = array(
+            'SAMLRequest' => 'fZJNa+MwEIb/ivHdiTyyZEskhkJYCPQDtmUPvQRZHm8NtqRKMuTnr2J3IbuHXsQwM887My86BDVPTj7a33aJP/FzwRCz6zyZINfKMV+8kVaFMUijZgwyavn68PQoYUek8zZabaf8DvmeUCGgj6M1eXY+HfOLILwHVQ+MK1ozrBG7itQcKzpQ3pQCdDU0DdQIefYLfUjkMU9CCQ9hwbMJUZmYUqSsCkILIG8ll8Alg/c8O6VrRqPiSn3E6OR+H+IyDDtt5z2a3tnRxHAXhSns3IfLs2cbX8yLfxgi+iQvBC2IKKB8g1JWm3x7uN0r10V8+yU/9m6HVzW7Cdchh/1900Y8J1vOp+yH9bOK3/t1y4x9MaytMnplwogm5u1l6KDrgUHFGeVEU92xUlCkrOZMNITr9LIUdvprhW3qtoKTrxhuZp5Nj9f2gn0D0IPQyfnkPlOEQpO0uko1DDSBqqtEl+aITew//m/yn2/U/gE=',
+            'RelayState' => '_1037fbc88ec82ce8e770b2bed1119747bb812a07e6',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'WRONGL2YrP7Ngms1ew8va4drALt9bjK4ZInIS8V6W3HUSlvW/Hw2VD93vy1jPdDBsrRt8cLIuAkkHatemiq1bbgWyrGqlbX5VA/klRYJvHVowfUh2vuf8s17bdFWUOlsTWXxKaA2lJl93MnzJQsZrfVeCqJrcTsSFlYYbcqr/g5Kdcgg='
+        );
+        $retrieveParametersFromServer = false;
+        $messageType = 'SAMLRequest';
+        $this->assertFalse(Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer));
+
+        $getData2 = array(
+            'SAMLResponse' => 'fZJva8IwEMa/Ssl7TZrW/gnqGHMMwSlM8cXeyLU9NaxNQi9lfvxVZczB5ptwSe733MPdjQma2qmFPdjOvyE5awiDU1MbUpevCetaoyyQJmWgQVK+VOvH14WSQ6Fca70tbc1ukPsEEGHrtTUsmM8mbDfKUhnFci8gliGINI/yXIAAiYnsw6JIRgWWAKlkwRZb6skJ64V6nKjDuSEPxvdPIowHIhpIsQkTFaYqSt9ZMEPy2oC/UEfvHSnOnfZFV38MjR1oN7TtgRv8tAZre9CGV9jYkGtT4Wnoju6Bauprme/ebOyErZbPi9XLfLnDoohwhHGc5WVSVhjCKM6rBMpYQpWJrIizfZ4IZNPxuTPqYrmd/m+EdONqPOfy8yG5rhxv0EMFHs52xvxWaHyd3tqD7+j37clWGGyh7vD+POiSrdZdWSIR49NrhR9R/teGTL8A',
+            'RelayState' => 'https://pitbulk.no-ip.org/newonelogin/demo1/index.php',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'WRONGvfWbbc47PkP3ejx4bjKsRX7lo9Ml1WRoE5J5owF/0mnyKHfSY6XbhO1wwjBV5vWdrUVX+xp6slHyAf4YoAsXFS0qhan6txDiZY4Oec6yE+l10iZbzvie06I4GPak4QrQ4gAyXOSzwCrRmJu4gnpeUxZ6IqKtdrKfAYRAcVfNKGA='
+        );
+        $retrieveParametersFromServer = false;
+        $messageType = 'SAMLResponse';
+        $this->assertFalse(Utils::validateBinarySign($messageType, $getData2, $idpData, $retrieveParametersFromServer));
+    }
+
+    /**
+     * Tests the validateBinarySign method of the Utils
+     * Case where the cert is wrong 
+     * 
+     * @covers OneLogin\Saml2\Utils::validateSign
+     */
+    public function testValidateBinarySignCertWrong()
+    {
+        $settingsDir = TEST_ROOT .'/settings/';
+        include $settingsDir.'settings1.php';
+
+        $settingsInfo['idp']['x509cert'] = 'MIICZDCCAc2gAwIBAgIBADANBgkqhkiG9w0BAQ0FADBPMQswCQYDVQQGEwJ1czEUMBIGA1UECAwLZXhhbXBsZS5jb20xFDASBgNVBAoMC2V4YW1wbGUuY29tMRQwEgYDVQQDDAtleGFtcGxlLmNvbTAeFw0yNTA1MjQyMjUyNTlaFw0zNTA1MjIyMjUyNTlaME8xCzAJBgNVBAYTAnVzMRQwEgYDVQQIDAtleGFtcGxlLmNvbTEUMBIGA1UECgwLZXhhbXBsZS5jb20xFDASBgNVBAMMC2V4YW1wbGUuY29tMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQD4pXDtSHXYCBA7j5Rc5v+Eh1QigIN2BPXcLtzvaQL5ajifXoQsXuSkcO3Rg7kcTVFcSjhtvM7/NUDq8yEq5g6cYCbdJHXCPH2xkotS57YWkY8zYohOuSa8LNLNeBVTcngQqLbprjgUAXjyXq8rlXu80lNgMw8eo7MbQCQpgC4VqwIDAQABo1AwTjAdBgNVHQ4EFgQUmPov0WxzvYUtCluz0AEFFWIx/NYwHwYDVR0jBBgwFoAUmPov0WxzvYUtCluz0AEFFWIx/NYwDAYDVR0TBAUwAwEB/zANBgkqhkiG9w0BAQ0FAAOBgQCHTsdA7LbSeDRiqqOHw+50ncIFCC2s4m6qBaxNrwSSyhoZKWhyUNxfnKIB4s/jaQxITn6U8hvuEv6e3Ews+07j4yIISF2SWefStAf8P/7Rt+qHQiV2zcE/RzxW4Trvav1dIfjqF26hOPQqGVnAKGP8wcjsEhwxUVOLP6EUTIoH3A==';
+        $settings = new Settings($settingsInfo);
+
+        $idpData = $settings->getIdPData();
+        $retrieveParametersFromServer = false;
+
+        unset($_SERVER['QUERY_STRING']);
+        $getData = array(
+            'SAMLRequest' => 'fZJNa+MwEIb/ivHdiTyyZEskhkJYCPQDtmUPvQRZHm8NtqRKMuTnr2J3IbuHXsQwM887My86BDVPTj7a33aJP/FzwRCz6zyZINfKMV+8kVaFMUijZgwyavn68PQoYUek8zZabaf8DvmeUCGgj6M1eXY+HfOLILwHVQ+MK1ozrBG7itQcKzpQ3pQCdDU0DdQIefYLfUjkMU9CCQ9hwbMJUZmYUqSsCkILIG8ll8Alg/c8O6VrRqPiSn3E6OR+H+IyDDtt5z2a3tnRxHAXhSns3IfLs2cbX8yLfxgi+iQvBC2IKKB8g1JWm3x7uN0r10V8+yU/9m6HVzW7Cdchh/1900Y8J1vOp+yH9bOK3/t1y4x9MaytMnplwogm5u1l6KDrgUHFGeVEU92xUlCkrOZMNITr9LIUdvprhW3qtoKTrxhuZp5Nj9f2gn0D0IPQyfnkPlOEQpO0uko1DDSBqqtEl+aITew//m/yn2/U/gE=',
+            'RelayState' => '_1037fbc88ec82ce8e770b2bed1119747bb812a07e6',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'L2YrP7Ngms1ew8va4drALt9bjK4ZInIS8V6W3HUSlvW/Hw2VD93vy1jPdDBsrRt8cLIuAkkHatemiq1bbgWyrGqlbX5VA/klRYJvHVowfUh2vuf8s17bdFWUOlsTWXxKaA2lJl93MnzJQsZrfVeCqJrcTsSFlYYbcqr/g5Kdcgg='
+        );
+        $messageType = 'SAMLRequest';
+        $this->assertFalse(Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer));
+
+        $getData2 = array(
+            'SAMLResponse' => 'fZJva8IwEMa/Ssl7TZrW/gnqGHMMwSlM8cXeyLU9NaxNQi9lfvxVZczB5ptwSe733MPdjQma2qmFPdjOvyE5awiDU1MbUpevCetaoyyQJmWgQVK+VOvH14WSQ6Fca70tbc1ukPsEEGHrtTUsmM8mbDfKUhnFci8gliGINI/yXIAAiYnsw6JIRgWWAKlkwRZb6skJ64V6nKjDuSEPxvdPIowHIhpIsQkTFaYqSt9ZMEPy2oC/UEfvHSnOnfZFV38MjR1oN7TtgRv8tAZre9CGV9jYkGtT4Wnoju6Bauprme/ebOyErZbPi9XLfLnDoohwhHGc5WVSVhjCKM6rBMpYQpWJrIizfZ4IZNPxuTPqYrmd/m+EdONqPOfy8yG5rhxv0EMFHs52xvxWaHyd3tqD7+j37clWGGyh7vD+POiSrdZdWSIR49NrhR9R/teGTL8A',
+            'RelayState' => 'https://pitbulk.no-ip.org/newonelogin/demo1/index.php',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'vfWbbc47PkP3ejx4bjKsRX7lo9Ml1WRoE5J5owF/0mnyKHfSY6XbhO1wwjBV5vWdrUVX+xp6slHyAf4YoAsXFS0qhan6txDiZY4Oec6yE+l10iZbzvie06I4GPak4QrQ4gAyXOSzwCrRmJu4gnpeUxZ6IqKtdrKfAYRAcVfNKGA='
+        );
+        $messageType = 'SAMLResponse';
+        $this->assertFalse(Utils::validateBinarySign($messageType, $getData2, $idpData, $retrieveParametersFromServer));
+    }
+
+    /**
+     * Tests the validateBinarySign method of the Utils
+     * Case removed element, ex RelayState
+     * 
+     * @covers OneLogin\Saml2\Utils::validateSign
+     */
+    public function testValidateBinarySignRemovedParam()
+    {
+        $settingsDir = TEST_ROOT .'/settings/';
+        include $settingsDir.'settings1.php';
+
+        $settings = new Settings($settingsInfo);
+
+        $idpData = $settings->getIdPData();
+        $retrieveParametersFromServer = false;
+
+        unset($_SERVER['QUERY_STRING']);
+        $getData = array(
+            'SAMLRequest' => 'fZJNa+MwEIb/ivHdiTyyZEskhkJYCPQDtmUPvQRZHm8NtqRKMuTnr2J3IbuHXsQwM887My86BDVPTj7a33aJP/FzwRCz6zyZINfKMV+8kVaFMUijZgwyavn68PQoYUek8zZabaf8DvmeUCGgj6M1eXY+HfOLILwHVQ+MK1ozrBG7itQcKzpQ3pQCdDU0DdQIefYLfUjkMU9CCQ9hwbMJUZmYUqSsCkILIG8ll8Alg/c8O6VrRqPiSn3E6OR+H+IyDDtt5z2a3tnRxHAXhSns3IfLs2cbX8yLfxgi+iQvBC2IKKB8g1JWm3x7uN0r10V8+yU/9m6HVzW7Cdchh/1900Y8J1vOp+yH9bOK3/t1y4x9MaytMnplwogm5u1l6KDrgUHFGeVEU92xUlCkrOZMNITr9LIUdvprhW3qtoKTrxhuZp5Nj9f2gn0D0IPQyfnkPlOEQpO0uko1DDSBqqtEl+aITew//m/yn2/U/gE=',
+            'RelayState' => '_1037fbc88ec82ce8e770b2bed1119747bb812a07e6',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'L2YrP7Ngms1ew8va4drALt9bjK4ZInIS8V6W3HUSlvW/Hw2VD93vy1jPdDBsrRt8cLIuAkkHatemiq1bbgWyrGqlbX5VA/klRYJvHVowfUh2vuf8s17bdFWUOlsTWXxKaA2lJl93MnzJQsZrfVeCqJrcTsSFlYYbcqr/g5Kdcgg='
+        );
+        unset($getData['RelayState']);
+        $messageType = 'SAMLRequest';
+        $this->assertFalse(Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer));
+
+        $getData2 = array(
+            'SAMLResponse' => 'fZJva8IwEMa/Ssl7TZrW/gnqGHMMwSlM8cXeyLU9NaxNQi9lfvxVZczB5ptwSe733MPdjQma2qmFPdjOvyE5awiDU1MbUpevCetaoyyQJmWgQVK+VOvH14WSQ6Fca70tbc1ukPsEEGHrtTUsmM8mbDfKUhnFci8gliGINI/yXIAAiYnsw6JIRgWWAKlkwRZb6skJ64V6nKjDuSEPxvdPIowHIhpIsQkTFaYqSt9ZMEPy2oC/UEfvHSnOnfZFV38MjR1oN7TtgRv8tAZre9CGV9jYkGtT4Wnoju6Bauprme/ebOyErZbPi9XLfLnDoohwhHGc5WVSVhjCKM6rBMpYQpWJrIizfZ4IZNPxuTPqYrmd/m+EdONqPOfy8yG5rhxv0EMFHs52xvxWaHyd3tqD7+j37clWGGyh7vD+POiSrdZdWSIR49NrhR9R/teGTL8A',
+            'RelayState' => 'https://pitbulk.no-ip.org/newonelogin/demo1/index.php',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'vfWbbc47PkP3ejx4bjKsRX7lo9Ml1WRoE5J5owF/0mnyKHfSY6XbhO1wwjBV5vWdrUVX+xp6slHyAf4YoAsXFS0qhan6txDiZY4Oec6yE+l10iZbzvie06I4GPak4QrQ4gAyXOSzwCrRmJu4gnpeUxZ6IqKtdrKfAYRAcVfNKGA='
+        );
+        unset($getData2['RelayState']);
+        $messageType = 'SAMLResponse';
+        $this->assertFalse(Utils::validateBinarySign($messageType, $getData2, $idpData, $retrieveParametersFromServer));
+    }
+
+    /**
+     * Tests the validateBinarySign method of the Utils
+     * Case No Query String
+     * 
+     * @covers OneLogin\Saml2\Utils::validateSign
+     */
+    public function testValidateBinarySignNoQueryString()
+    {
+        $settingsDir = TEST_ROOT .'/settings/';
+        include $settingsDir.'settings1.php';
+
+        $settings = new Settings($settingsInfo);
+
+        $idpData = $settings->getIdPData();
+        $retrieveParametersFromServer = true;
+
+        unset($_SERVER['QUERY_STRING']);
+        $getData = array(
+            'SAMLRequest' => 'fZJNa+MwEIb/ivHdiTyyZEskhkJYCPQDtmUPvQRZHm8NtqRKMuTnr2J3IbuHXsQwM887My86BDVPTj7a33aJP/FzwRCz6zyZINfKMV+8kVaFMUijZgwyavn68PQoYUek8zZabaf8DvmeUCGgj6M1eXY+HfOLILwHVQ+MK1ozrBG7itQcKzpQ3pQCdDU0DdQIefYLfUjkMU9CCQ9hwbMJUZmYUqSsCkILIG8ll8Alg/c8O6VrRqPiSn3E6OR+H+IyDDtt5z2a3tnRxHAXhSns3IfLs2cbX8yLfxgi+iQvBC2IKKB8g1JWm3x7uN0r10V8+yU/9m6HVzW7Cdchh/1900Y8J1vOp+yH9bOK3/t1y4x9MaytMnplwogm5u1l6KDrgUHFGeVEU92xUlCkrOZMNITr9LIUdvprhW3qtoKTrxhuZp5Nj9f2gn0D0IPQyfnkPlOEQpO0uko1DDSBqqtEl+aITew//m/yn2/U/gE=',
+            'RelayState' => '_1037fbc88ec82ce8e770b2bed1119747bb812a07e6',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'L2YrP7Ngms1ew8va4drALt9bjK4ZInIS8V6W3HUSlvW/Hw2VD93vy1jPdDBsrRt8cLIuAkkHatemiq1bbgWyrGqlbX5VA/klRYJvHVowfUh2vuf8s17bdFWUOlsTWXxKaA2lJl93MnzJQsZrfVeCqJrcTsSFlYYbcqr/g5Kdcgg='
+        );
+        unset($getData['RelayState']);
+        $messageType = 'SAMLRequest';
+        try {
+            Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer);
+            $this->fail('Error was not raised');
+        } catch (Exception $e) {
+            $expectedMessage = "No query string provided";
+            $this->assertEquals($expectedMessage, $e->getMessage());
+        }
+
+        $getData2 = array(
+            'SAMLResponse' => 'fZJva8IwEMa/Ssl7TZrW/gnqGHMMwSlM8cXeyLU9NaxNQi9lfvxVZczB5ptwSe733MPdjQma2qmFPdjOvyE5awiDU1MbUpevCetaoyyQJmWgQVK+VOvH14WSQ6Fca70tbc1ukPsEEGHrtTUsmM8mbDfKUhnFci8gliGINI/yXIAAiYnsw6JIRgWWAKlkwRZb6skJ64V6nKjDuSEPxvdPIowHIhpIsQkTFaYqSt9ZMEPy2oC/UEfvHSnOnfZFV38MjR1oN7TtgRv8tAZre9CGV9jYkGtT4Wnoju6Bauprme/ebOyErZbPi9XLfLnDoohwhHGc5WVSVhjCKM6rBMpYQpWJrIizfZ4IZNPxuTPqYrmd/m+EdONqPOfy8yG5rhxv0EMFHs52xvxWaHyd3tqD7+j37clWGGyh7vD+POiSrdZdWSIR49NrhR9R/teGTL8A',
+            'RelayState' => 'https://pitbulk.no-ip.org/newonelogin/demo1/index.php',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'vfWbbc47PkP3ejx4bjKsRX7lo9Ml1WRoE5J5owF/0mnyKHfSY6XbhO1wwjBV5vWdrUVX+xp6slHyAf4YoAsXFS0qhan6txDiZY4Oec6yE+l10iZbzvie06I4GPak4QrQ4gAyXOSzwCrRmJu4gnpeUxZ6IqKtdrKfAYRAcVfNKGA='
+        );
+        unset($getData2['RelayState']);
+        $messageType = 'SAMLResponse';
+        try {
+            Utils::validateBinarySign($messageType, $getData2, $idpData, $retrieveParametersFromServer);
+            $this->fail('Error was not raised');
+        } catch (Exception $e) {
+            $expectedMessage = "No query string provided";
+            $this->assertEquals($expectedMessage, $e->getMessage());
+        }
+    }
+
+    /**
+     * Tests the validateBinarySign method of the Utils
+     * Case No Cert
+     * 
+     * @covers OneLogin\Saml2\Utils::validateSign
+     */
+    public function testValidateBinarySignNoCert()
+    {
+        $settingsDir = TEST_ROOT .'/settings/';
+        include $settingsDir.'settings1.php';
+
+        $settings = new Settings($settingsInfo);
+
+        $idpData = $settings->getIdPData();
+        unset($idpData['x509cert']);
+
+        $retrieveParametersFromServer = false;
+
+        unset($_SERVER['QUERY_STRING']);
+        $getData = array(
+            'SAMLRequest' => 'fZJNa+MwEIb/ivHdiTyyZEskhkJYCPQDtmUPvQRZHm8NtqRKMuTnr2J3IbuHXsQwM887My86BDVPTj7a33aJP/FzwRCz6zyZINfKMV+8kVaFMUijZgwyavn68PQoYUek8zZabaf8DvmeUCGgj6M1eXY+HfOLILwHVQ+MK1ozrBG7itQcKzpQ3pQCdDU0DdQIefYLfUjkMU9CCQ9hwbMJUZmYUqSsCkILIG8ll8Alg/c8O6VrRqPiSn3E6OR+H+IyDDtt5z2a3tnRxHAXhSns3IfLs2cbX8yLfxgi+iQvBC2IKKB8g1JWm3x7uN0r10V8+yU/9m6HVzW7Cdchh/1900Y8J1vOp+yH9bOK3/t1y4x9MaytMnplwogm5u1l6KDrgUHFGeVEU92xUlCkrOZMNITr9LIUdvprhW3qtoKTrxhuZp5Nj9f2gn0D0IPQyfnkPlOEQpO0uko1DDSBqqtEl+aITew//m/yn2/U/gE=',
+            'RelayState' => '_1037fbc88ec82ce8e770b2bed1119747bb812a07e6',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'L2YrP7Ngms1ew8va4drALt9bjK4ZInIS8V6W3HUSlvW/Hw2VD93vy1jPdDBsrRt8cLIuAkkHatemiq1bbgWyrGqlbX5VA/klRYJvHVowfUh2vuf8s17bdFWUOlsTWXxKaA2lJl93MnzJQsZrfVeCqJrcTsSFlYYbcqr/g5Kdcgg='
+        );
+        $messageType = 'SAMLRequest';
+        try {
+            Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer);
+            $this->fail('Error was not raised');
+        } catch (Exception $e) {
+            $expectedMessage = "In order to validate the sign on the Logout Request, the x509cert of the IdP is required";
+            $this->assertEquals($expectedMessage, $e->getMessage());
+        }
+
+        $getData2 = array(
+            'SAMLResponse' => 'fZJva8IwEMa/Ssl7TZrW/gnqGHMMwSlM8cXeyLU9NaxNQi9lfvxVZczB5ptwSe733MPdjQma2qmFPdjOvyE5awiDU1MbUpevCetaoyyQJmWgQVK+VOvH14WSQ6Fca70tbc1ukPsEEGHrtTUsmM8mbDfKUhnFci8gliGINI/yXIAAiYnsw6JIRgWWAKlkwRZb6skJ64V6nKjDuSEPxvdPIowHIhpIsQkTFaYqSt9ZMEPy2oC/UEfvHSnOnfZFV38MjR1oN7TtgRv8tAZre9CGV9jYkGtT4Wnoju6Bauprme/ebOyErZbPi9XLfLnDoohwhHGc5WVSVhjCKM6rBMpYQpWJrIizfZ4IZNPxuTPqYrmd/m+EdONqPOfy8yG5rhxv0EMFHs52xvxWaHyd3tqD7+j37clWGGyh7vD+POiSrdZdWSIR49NrhR9R/teGTL8A',
+            'RelayState' => 'https://pitbulk.no-ip.org/newonelogin/demo1/index.php',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'vfWbbc47PkP3ejx4bjKsRX7lo9Ml1WRoE5J5owF/0mnyKHfSY6XbhO1wwjBV5vWdrUVX+xp6slHyAf4YoAsXFS0qhan6txDiZY4Oec6yE+l10iZbzvie06I4GPak4QrQ4gAyXOSzwCrRmJu4gnpeUxZ6IqKtdrKfAYRAcVfNKGA='
+        );
+        $messageType = 'SAMLResponse';
+        try {
+            Utils::validateBinarySign($messageType, $getData2, $idpData, $retrieveParametersFromServer);
+            $this->fail('Error was not raised');
+        } catch (Exception $e) {
+            $expectedMessage = "In order to validate the sign on the Logout Response, the x509cert of the IdP is required";
+            $this->assertEquals($expectedMessage, $e->getMessage());
+        }
+    }
+
+
+    /**
+     * Tests the validateBinarySign method of the Utils
+     * Case Invalid Parameters: Ex. SAMLRequest and SAMLResponse present at the same time
+     * 
+     * @covers OneLogin\Saml2\Utils::validateSign
+     */
+    public function testValidateBinarySignReqAndRes()
+    {
+        $settingsDir = TEST_ROOT .'/settings/';
+        include $settingsDir.'settings1.php';
+
+        $settings = new Settings($settingsInfo);
+
+        $idpData = $settings->getIdPData();
+        $retrieveParametersFromServer = false;
+
+        unset($_SERVER['QUERY_STRING']);
+        $getData = array(
+            'SAMLRequest' => 'fZJNa+MwEIb/ivHdiTyyZEskhkJYCPQDtmUPvQRZHm8NtqRKMuTnr2J3IbuHXsQwM887My86BDVPTj7a33aJP/FzwRCz6zyZINfKMV+8kVaFMUijZgwyavn68PQoYUek8zZabaf8DvmeUCGgj6M1eXY+HfOLILwHVQ+MK1ozrBG7itQcKzpQ3pQCdDU0DdQIefYLfUjkMU9CCQ9hwbMJUZmYUqSsCkILIG8ll8Alg/c8O6VrRqPiSn3E6OR+H+IyDDtt5z2a3tnRxHAXhSns3IfLs2cbX8yLfxgi+iQvBC2IKKB8g1JWm3x7uN0r10V8+yU/9m6HVzW7Cdchh/1900Y8J1vOp+yH9bOK3/t1y4x9MaytMnplwogm5u1l6KDrgUHFGeVEU92xUlCkrOZMNITr9LIUdvprhW3qtoKTrxhuZp5Nj9f2gn0D0IPQyfnkPlOEQpO0uko1DDSBqqtEl+aITew//m/yn2/U/gE=',
+            'SAMLResponse' => 'fZJva8IwEMa/Ssl7TZrW/gnqGHMMwSlM8cXeyLU9NaxNQi9lfvxVZczB5ptwSe733MPdjQma2qmFPdjOvyE5awiDU1MbUpevCetaoyyQJmWgQVK+VOvH14WSQ6Fca70tbc1ukPsEEGHrtTUsmM8mbDfKUhnFci8gliGINI/yXIAAiYnsw6JIRgWWAKlkwRZb6skJ64V6nKjDuSEPxvdPIowHIhpIsQkTFaYqSt9ZMEPy2oC/UEfvHSnOnfZFV38MjR1oN7TtgRv8tAZre9CGV9jYkGtT4Wnoju6Bauprme/ebOyErZbPi9XLfLnDoohwhHGc5WVSVhjCKM6rBMpYQpWJrIizfZ4IZNPxuTPqYrmd/m+EdONqPOfy8yG5rhxv0EMFHs52xvxWaHyd3tqD7+j37clWGGyh7vD+POiSrdZdWSIR49NrhR9R/teGTL8A',
+            'RelayState' => '_1037fbc88ec82ce8e770b2bed1119747bb812a07e6',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'L2YrP7Ngms1ew8va4drALt9bjK4ZInIS8V6W3HUSlvW/Hw2VD93vy1jPdDBsrRt8cLIuAkkHatemiq1bbgWyrGqlbX5VA/klRYJvHVowfUh2vuf8s17bdFWUOlsTWXxKaA2lJl93MnzJQsZrfVeCqJrcTsSFlYYbcqr/g5Kdcgg='
+        );
+
+        $messageType = 'SAMLRequest';
+        try {
+            Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer);
+            $this->fail('Error was not raised');
+        } catch (Exception $e) {
+            $expectedMessage = "Both SAMLRequest and SAMLResponse provided";
+            $this->assertEquals($expectedMessage, $e->getMessage());
+        }
+
+        $retrieveParametersFromServer = true;
+        $_SERVER['QUERY_STRING'] = 'SAMLRequest=' . urlencode('fZJNa+MwEIb/ivHdiTyyZEskhkJYCPQDtmUPvQRZHm8NtqRKMuTnr2J3IbuHXsQwM887My86BDVPTj7a33aJP/FzwRCz6zyZINfKMV+8kVaFMUijZgwyavn68PQoYUek8zZabaf8DvmeUCGgj6M1eXY+HfOLILwHVQ+MK1ozrBG7itQcKzpQ3pQCdDU0DdQIefYLfUjkMU9CCQ9hwbMJUZmYUqSsCkILIG8ll8Alg/c8O6VrRqPiSn3E6OR+H+IyDDtt5z2a3tnRxHAXhSns3IfLs2cbX8yLfxgi+iQvBC2IKKB8g1JWm3x7uN0r10V8+yU/9m6HVzW7Cdchh/1900Y8J1vOp+yH9bOK3/t1y4x9MaytMnplwogm5u1l6KDrgUHFGeVEU92xUlCkrOZMNITr9LIUdvprhW3qtoKTrxhuZp5Nj9f2gn0D0IPQyfnkPlOEQpO0uko1DDSBqqtEl+aITew//m/yn2/U/gE='). '&RelayState='.urlencode('_1037fbc88ec82ce8e770b2bed1119747bb812a07e6') . '%SAMLResponse=' . urlencode('fZJva8IwEMa/Ssl7TZrW/gnqGHMMwSlM8cXeyLU9NaxNQi9lfvxVZczB5ptwSe733MPdjQma2qmFPdjOvyE5awiDU1MbUpevCetaoyyQJmWgQVK+VOvH14WSQ6Fca70tbc1ukPsEEGHrtTUsmM8mbDfKUhnFci8gliGINI/yXIAAiYnsw6JIRgWWAKlkwRZb6skJ64V6nKjDuSEPxvdPIowHIhpIsQkTFaYqSt9ZMEPy2oC/UEfvHSnOnfZFV38MjR1oN7TtgRv8tAZre9CGV9jYkGtT4Wnoju6Bauprme/ebOyErZbPi9XLfLnDoohwhHGc5WVSVhjCKM6rBMpYQpWJrIizfZ4IZNPxuTPqYrmd/m+EdONqPOfy8yG5rhxv0EMFHs52xvxWaHyd3tqD7+j37clWGGyh7vD+POiSrdZdWSIR49NrhR9R/teGTL8A') . '&SigAlg='.urlencode('http://www.w3.org/2000/09/xmldsig#rsa-sha1').'&Signature=' . urlencode('L2YrP7Ngms1ew8va4drALt9bjK4ZInIS8V6W3HUSlvW/Hw2VD93vy1jPdDBsrRt8cLIuAkkHatemiq1bbgWyrGqlbX5VA/klRYJvHVowfUh2vuf8s17bdFWUOlsTWXxKaA2lJl93MnzJQsZrfVeCqJrc');
+        try {
+            Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer);
+            $this->fail('Error was not raised');
+        } catch (Exception $e) {
+            $expectedMessage = "Both SAMLRequest and SAMLResponse provided";
+            $this->assertEquals($expectedMessage, $e->getMessage());
+        }
+        
+        $getData2 = array(
+            'SAMLRequest' => 'fZJNa+MwEIb/ivHdiTyyZEskhkJYCPQDtmUPvQRZHm8NtqRKMuTnr2J3IbuHXsQwM887My86BDVPTj7a33aJP/FzwRCz6zyZINfKMV+8kVaFMUijZgwyavn68PQoYUek8zZabaf8DvmeUCGgj6M1eXY+HfOLILwHVQ+MK1ozrBG7itQcKzpQ3pQCdDU0DdQIefYLfUjkMU9CCQ9hwbMJUZmYUqSsCkILIG8ll8Alg/c8O6VrRqPiSn3E6OR+H+IyDDtt5z2a3tnRxHAXhSns3IfLs2cbX8yLfxgi+iQvBC2IKKB8g1JWm3x7uN0r10V8+yU/9m6HVzW7Cdchh/1900Y8J1vOp+yH9bOK3/t1y4x9MaytMnplwogm5u1l6KDrgUHFGeVEU92xUlCkrOZMNITr9LIUdvprhW3qtoKTrxhuZp5Nj9f2gn0D0IPQyfnkPlOEQpO0uko1DDSBqqtEl+aITew//m/yn2/U/gE=',
+            'SAMLResponse' => 'fZJva8IwEMa/Ssl7TZrW/gnqGHMMwSlM8cXeyLU9NaxNQi9lfvxVZczB5ptwSe733MPdjQma2qmFPdjOvyE5awiDU1MbUpevCetaoyyQJmWgQVK+VOvH14WSQ6Fca70tbc1ukPsEEGHrtTUsmM8mbDfKUhnFci8gliGINI/yXIAAiYnsw6JIRgWWAKlkwRZb6skJ64V6nKjDuSEPxvdPIowHIhpIsQkTFaYqSt9ZMEPy2oC/UEfvHSnOnfZFV38MjR1oN7TtgRv8tAZre9CGV9jYkGtT4Wnoju6Bauprme/ebOyErZbPi9XLfLnDoohwhHGc5WVSVhjCKM6rBMpYQpWJrIizfZ4IZNPxuTPqYrmd/m+EdONqPOfy8yG5rhxv0EMFHs52xvxWaHyd3tqD7+j37clWGGyh7vD+POiSrdZdWSIR49NrhR9R/teGTL8A',
+            'RelayState' => 'https://pitbulk.no-ip.org/newonelogin/demo1/index.php',
+            'SigAlg' => 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+            'Signature' => 'vfWbbc47PkP3ejx4bjKsRX7lo9Ml1WRoE5J5owF/0mnyKHfSY6XbhO1wwjBV5vWdrUVX+xp6slHyAf4YoAsXFS0qhan6txDiZY4Oec6yE+l10iZbzvie06I4GPak4QrQ4gAyXOSzwCrRmJu4gnpeUxZ6IqKtdrKfAYRAcVfNKGA='
+        );
+
+        $messageType = 'SAMLResponse';
+        $retrieveParametersFromServer = false;
+        try {
+            Utils::validateBinarySign($messageType, $getData2, $idpData, $retrieveParametersFromServer);
+            $this->fail('Error was not raised');
+        } catch (Exception $e) {
+            $expectedMessage = "Both SAMLRequest and SAMLResponse provided";
+            $this->assertEquals($expectedMessage, $e->getMessage());
+        }
+
+        $retrieveParametersFromServer = true;
+        $_SERVER['QUERY_STRING'] = 'SAMLRequest='. urlencode('fZJNa+MwEIb/ivHdiTyyZEskhkJYCPQDtmUPvQRZHm8NtqRKMuTnr2J3IbuHXsQwM887My86BDVPTj7a33aJP/FzwRCz6zyZINfKMV+8kVaFMUijZgwyavn68PQoYUek8zZabaf8DvmeUCGgj6M1eXY+HfOLILwHVQ+MK1ozrBG7itQcKzpQ3pQCdDU0DdQIefYLfUjkMU9CCQ9hwbMJUZmYUqSsCkILIG8ll8Alg/c8O6VrRqPiSn3E6OR+H+IyDDtt5z2a3tnRxHAXhSns3IfLs2cbX8yLfxgi+iQvBC2IKKB8g1JWm3x7uN0r10V8+yU/9m6HVzW7Cdchh/1900Y8J1vOp+yH9bOK3/t1y4x9MaytMnplwogm5u1l6KDrgUHFGeVEU92xUlCkrOZMNITr9LIUdvprhW3qtoKTrxhuZp5Nj9f2gn0D0IPQyfnkPlOEQpO0uko1DDSBqqtEl+aITew//m/yn2/U/gE=') . '&SAMLResponse='.urlencode('fZJva8IwEMa/Ssl7TZrW/gnqGHMMwSlM8cXeyLU9NaxNQi9lfvxVZczB5ptwSe733MPdjQma2qmFPdjOvyE5awiDU1MbUpevCetaoyyQJmWgQVK+VOvH14WSQ6Fca70tbc1ukPsEEGHrtTUsmM8mbDfKUhnFci8gliGINI/yXIAAiYnsw6JIRgWWAKlkwRZb6skJ64V6nKjDuSEPxvdPIowHIhpIsQkTFaYqSt9ZMEPy2oC/UEfvHSnOnfZFV38MjR1oN7TtgRv8tAZre9CGV9jYkGtT4Wnoju6Bauprme/ebOyErZbPi9XLfLnDoohwhHGc5WVSVhjCKM6rBMpYQpWJrIizfZ4IZNPxuTPqYrmd/m+EdONqPOfy8yG5rhxv0EMFHs52xvxWaHyd3tqD7+j37clWGGyh7vD+POiSrdZdWSIR49NrhR9R/teGTL8A').'&RelayState='.urlencode('https://pitbulk.no-ip.org/newonelogin/demo1/index.php').'&SigAlg='.urlencode('http://www.w3.org/2000/09/xmldsig#rsa-sha1').'&Signature='.urlencode('vfWbbc47PkP3ejx4bjKsRX7lo9Ml1WRoE5J5owF/0mnyKHfSY6XbhO1wwjBV5vWdrUVX+xp6slHyAf4YoAsXFS0qhan6txDiZY4Oec6yE+l10iZbzvie06I4GPak4QrQ4gAyXOSzwCrRmJu4gnpeUxZ6IqKtdrKfAYRAcVfNKGA=');
+        try {
+            Utils::validateBinarySign($messageType, $getData2, $idpData, $retrieveParametersFromServer);
+            $this->fail('Error was not raised');
+        } catch (Exception $e) {
+            $expectedMessage = "Both SAMLRequest and SAMLResponse provided";
+            $this->assertEquals($expectedMessage, $e->getMessage());
+        }
+    }
+
+    /**
+     * Tests the validateBinarySign method of the Utils
+     * Case Invalid Parameters: Ex. Duplicated Parameters
+     * 
+     * @covers OneLogin\Saml2\Utils::validateSign
+     */
+    public function testValidateBinarySignDuplicatedParameters()
+    {
+        $settingsDir = TEST_ROOT .'/settings/';
+        include $settingsDir.'settings6.php';
+
+        $settings = new Settings($settingsInfo);
+        $idpData = $settings->getIdPData();
+
+        $getData = array();
+        $retrieveParametersFromServer = true;
+        $messageType = 'SAMLRequest';
+
+        $_SERVER['QUERY_STRING'] = 'SAMLRequest=xxx&SAMLRequest=yyy';
+        try {
+            Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer);
+            $this->fail('Error was not raised');
+        } catch (Exception $e) {
+            $expectedMessage = "Duplicate parameter in query string";
+            $this->assertEquals($expectedMessage, $e->getMessage());
+        }
+
+        $_SERVER['QUERY_STRING'] = 'SAMLResponse=xxx&SAMLResponse=yyy';
+        try {
+            Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer);
+            $this->fail('Error was not raised');
+        } catch (Exception $e) {
+            $expectedMessage = "Duplicate parameter in query string";
+            $this->assertEquals($expectedMessage, $e->getMessage());
+        }
+
+        $_SERVER['QUERY_STRING'] = 'RelayState=xxx&RelayState=yyy';
+        try {
+            Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer);
+            $this->fail('Error was not raised');
+        } catch (Exception $e) {
+            $expectedMessage = "Duplicate parameter in query string";
+            $this->assertEquals($expectedMessage, $e->getMessage());
+        }
+
+        $_SERVER['QUERY_STRING'] = 'SigAlg=xxx&SigAlg=yyy';
+        try {
+            Utils::validateBinarySign($messageType, $getData, $idpData, $retrieveParametersFromServer);
+            $this->fail('Error was not raised');
+        } catch (Exception $e) {
+            $expectedMessage = "Duplicate parameter in query string";
+            $this->assertEquals($expectedMessage, $e->getMessage());
         }
     }
 }

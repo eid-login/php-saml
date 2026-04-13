@@ -2,15 +2,13 @@
 /**
  * This file is part of php-saml.
  *
- * (c) OneLogin Inc
- *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  *
  * @package OneLogin
- * @author  OneLogin Inc <saml-info@onelogin.com>
- * @license MIT https://github.com/onelogin/php-saml/blob/master/LICENSE
- * @link    https://github.com/onelogin/php-saml
+ * @author  Sixto Martin <sixto.martin.garcia@gmail.com>
+ * @license MIT https://github.com/SAML-Toolkits/php-saml/blob/master/LICENSE
+ * @link    https://github.com/SAML-Toolkits/php-saml
  */
 
 namespace OneLogin\Saml2;
@@ -22,7 +20,7 @@ use DOMDocument;
 use Exception;
 
 /**
- * Configuration of the OneLogin PHP Toolkit
+ * Configuration of the SAML PHP Toolkit
  */
 class Settings
 {
@@ -129,7 +127,7 @@ class Settings
      * @throws Error If any settings parameter is invalid
      * @throws Exception If Settings is incorrectly supplied
      */
-    public function __construct(array $settings = null, $spValidationOnly = false)
+    public function __construct(?array $settings = null,bool $spValidationOnly = false)
     {
         $this->_spValidationOnly = $spValidationOnly;
         $this->_loadPaths();
@@ -680,7 +678,7 @@ class Settings
                 if (!isset($contact['givenName']) || empty($contact['givenName'])
                     || !isset($contact['emailAddress']) || empty($contact['emailAddress'])
                 ) {
-                    $errors[] = 'contact_not_enought_data';
+                    $errors[] = 'contact_not_enough_data';
                     break;
                 }
             }
@@ -692,7 +690,7 @@ class Settings
                     || !isset($organization['displayname']) || empty($organization['displayname'])
                     || !isset($organization['url']) || empty($organization['url'])
                 ) {
-                    $errors[] = 'organization_not_enought_data';
+                    $errors[] = 'organization_not_enough_data';
                     break;
                 }
             }
@@ -974,14 +972,15 @@ class Settings
      * $advancedSettings['security']['wantAssertionsEncrypted'] are enabled.
      * @param int|null      $validUntil    Metadata's valid time
      * @param int|null      $cacheDuration Duration of the cache in seconds
+     * @param bool          $ignoreValidUntil exclude the validUntil tag from metadata
      *
      * @return string  SP metadata (xml)
      * @throws Exception
      * @throws Error
      */
-    public function getSPMetadata($alwaysPublishEncryptionCert = false, $validUntil = null, $cacheDuration = null)
+    public function getSPMetadata($alwaysPublishEncryptionCert = false, $validUntil = null, $cacheDuration = null, $ignoreValidUntil = false)
     {
-        $metadata = Metadata::builder($this->_sp, $this->_security['authnRequestsSigned'], $this->_security['wantAssertionsSigned'], $validUntil, $cacheDuration, $this->getContacts(), $this->getOrganization());
+        $metadata = Metadata::builder($this->_sp, $this->_security['authnRequestsSigned'], $this->_security['wantAssertionsSigned'], $validUntil, $cacheDuration, $this->getContacts(), $this->getOrganization(), [], $ignoreValidUntil);
 
         $certNew = $this->getSPcertNew();
         $certNewEnc = $this->getSPcertNewEnc();
@@ -1136,7 +1135,7 @@ class Settings
     }
 
     /**
-     * Formats the Multple IdP certs.
+     * Formats the Multiple IdP certs.
      */
     public function formatIdPCertMulti()
     {

@@ -65,6 +65,35 @@ class SettingsTest extends \PHPUnit\Framework\TestCase
     }
 
     /**
+     * Tests the use of the spValidationOnly at OneLogin\Saml2\Settings
+     *
+     * @covers OneLogin\Saml2\Settings
+     */
+    public function testSpValidateOnly()
+    {
+        $settingsDir = TEST_ROOT .'/settings/';
+        include $settingsDir.'settings2.php';
+        unset($settingsInfo['idp']);
+
+        $settings = new Settings($settingsInfo, true);
+        $this->assertEmpty($settings->getErrors());
+
+        try {
+            $settings2 = new Settings($settingsInfo, false);
+            $this->fail('Error was not raised');
+        } catch (Error $e) {
+            $this->assertStringContainsString('idp_not_found', $e->getMessage());
+        }
+
+        try {
+            $settings3 = new Settings($settingsInfo);
+            $this->fail('Error was not raised');
+        } catch (Error $e) {
+            $this->assertStringContainsString('idp_not_found', $e->getMessage());
+        }
+    }
+
+    /**
      * Tests getCertPath method of the Settings
      *
      * @covers OneLogin\Saml2\Settings::getBasePath
@@ -242,7 +271,7 @@ class SettingsTest extends \PHPUnit\Framework\TestCase
         $this->assertTrue($responsesIsInvalid);
     }
 
-    public function invalidCompressSettingsProvider()
+    static public function invalidCompressSettingsProvider()
     {
         return array(
             array(1),
@@ -364,7 +393,7 @@ class SettingsTest extends \PHPUnit\Framework\TestCase
 
         $settingsDir = TEST_ROOT .'/settings/';
         include $settingsDir.'settings1.php';
-
+        $settingsInfo['security']['signMetadata'] = array();
         $settingsInfo['security']['signMetadata']['keyFileName'] = 'metadata.key';
         $settingsInfo['organization'] = array(
             'en-US' => array(
@@ -387,7 +416,7 @@ class SettingsTest extends \PHPUnit\Framework\TestCase
             $this->fail('Error was not raised');
         } catch (Error $e) {
             $this->assertStringContainsString('sp_signMetadata_invalid', $e->getMessage());
-            $this->assertStringContainsString('organization_not_enought_data', $e->getMessage());
+            $this->assertStringContainsString('organization_not_enough_data', $e->getMessage());
             $this->assertStringContainsString('contact_type_invalid', $e->getMessage());
         }
 
@@ -398,7 +427,7 @@ class SettingsTest extends \PHPUnit\Framework\TestCase
             $this->fail('Error was not raised');
         } catch (Error $e) {
             $this->assertStringContainsString('sp_signMetadata_invalid', $e->getMessage());
-            $this->assertStringContainsString('organization_not_enought_data', $e->getMessage());
+            $this->assertStringContainsString('organization_not_enough_data', $e->getMessage());
             $this->assertStringContainsString('contact_type_invalid', $e->getMessage());
         }
     }
@@ -510,7 +539,7 @@ class SettingsTest extends \PHPUnit\Framework\TestCase
         $this->assertEquals($expectEncryptionKeyDescriptor ? 2 : 0, substr_count($metadata, '<md:KeyDescriptor use="encryption"'));
     }
 
-    public function getSPMetadataWithX509CertNewDataProvider()
+    static public function getSPMetadataWithX509CertNewDataProvider()
     {
         return [
             'settings do not require encryption' => [
@@ -831,8 +860,9 @@ class SettingsTest extends \PHPUnit\Framework\TestCase
         try {
             $errors = $settings->validateMetadata($metadata);
             $this->fail('Exception was not raised');
-        } catch (\Error $e) {
-            $this->assertStringContainsString('Argument #1 ($source) must not be empty', $e->getMessage());
+        } catch (\Error | \Exception $e) {
+            $expectedErrors = array('DOMDocument::loadXML(): Argument #1 ($source) must not be empty', 'DOMDocument::loadXML(): Empty string supplied as input');
+            $this->assertTrue(in_array($e->getMessage(), $expectedErrors));
         }
 
         $metadata = '<no xml>';

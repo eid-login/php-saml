@@ -3,7 +3,7 @@
     "description": "Fork of OneLogin PHP SAML Toolkit",
     "license": "MIT",
     "homepage": "https://github.com/eid-login/php-saml/",
-    "keywords": ["saml", "saml2", "onelogin"],
+    "keywords": ["saml", "saml2", "sso", "federation", "identity"],
     "autoload": {
         "psr-4": {
             "OneLogin\\": "src/"
@@ -22,7 +22,7 @@
     ], 
     "require": {
         "php": ">=7.3",
-        "eid-login/xmlseclibs": "1.0.0"
+        "eid-login/xmlseclibs": "1.1.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.5",

@@ -8,6 +8,7 @@ use OneLogin\Saml2\Utils;
 use OneLogin\Saml2\ValidationError;
 
 use DOMDocument;
+use Exception;
 
 /**
  * Unit tests for Response messages
@@ -198,7 +199,7 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
             $nameId10 = $response10->getNameId();
             $this->fail('ValidationError was not raised');
         } catch (ValidationError $e) {
-            $this->assertStringContainsString('The SPNameQualifier value mistmatch the SP entityID value.', $e->getMessage());
+            $this->assertStringContainsString('The SPNameQualifier value mismatch the SP entityID value.', $e->getMessage());
         }
 
         $response11 = new Response($settings, $xml6);
@@ -404,7 +405,7 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
             $nameIdData10 = $response10->getNameIdData();
             $this->fail('ValidationError was not raised');
         } catch (ValidationError $e) {
-            $this->assertStringContainsString('The SPNameQualifier value mistmatch the SP entityID value.', $e->getMessage());
+            $this->assertStringContainsString('The SPNameQualifier value mismatch the SP entityID value.', $e->getMessage());
         }
 
         $response11 = new Response($settings, $xml6);
@@ -414,6 +415,71 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
         } catch (ValidationError $e) {
             $this->assertStringContainsString('An empty NameID value found', $e->getMessage());
         }
+
+        $xml7 = file_get_contents(TEST_ROOT . '/data/responses/invalids/no_value_nameid.xml.base64');
+        $response11 = new Response($this->_settings, $xml7);
+        $nameIdData12 = $response11->getNameIdData();
+        $expectedNameIdData10 = array(
+            'Value' => "",
+            'Format' => "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
+        );
+        $this->assertEquals($expectedNameIdData10, $nameIdData12);
+
+        $settingsDir = TEST_ROOT .'/settings/';
+        include $settingsDir.'settings1.php';
+
+        $settingsInfo['strict'] = true;
+        $settingsInfo['security']['wantNameId'] = true;
+
+        $settings = new Settings($settingsInfo);
+        $response12 = new Response($settings, $xml7);
+
+        try {
+            $nameIdData13 = $response12->getNameIdData();
+            $this->fail('ValidationError was not raised');
+        } catch (ValidationError $e) {
+            $this->assertStringContainsString('An empty NameID value found', $e->getMessage());
+        }
+
+        $settingsInfo['security']['wantNameId'] = false;
+
+        $settings = new Settings($settingsInfo);
+        $response13 = new Response($settings, $xml7);
+
+        $nameIdData14 = $response13->getNameIdData();
+
+        $expectedNameIdData11 = array(
+            'Value' => "",
+            'Format' => "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
+        );
+        $this->assertEquals($expectedNameIdData11, $nameIdData14);
+
+        $settingsInfo['strict'] = false;
+        $settingsInfo['security']['wantNameId'] = true;
+
+        $settings = new Settings($settingsInfo);
+        $response14 = new Response($settings, $xml7);
+
+        $nameIdData15 = $response14->getNameIdData();
+
+        $expectedNameIdData12 = array(
+            'Value' => "",
+            'Format' => "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
+        );
+        $this->assertEquals($expectedNameIdData12, $nameIdData15);
+
+        $settingsInfo['security']['wantNameId'] = false;
+
+        $settings = new Settings($settingsInfo);
+        $response15 = new Response($settings, $xml7);
+
+        $nameIdData16 = $response15->getNameIdData();
+
+        $expectedNameIdData13 = array(
+            'Value' => "",
+            'Format' => "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
+        );
+        $this->assertEquals($expectedNameIdData13, $nameIdData16);
     }
 
     /**
@@ -642,7 +708,7 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
     }
 
     /**
-     * Tests the getAttributesWithFriendlyName method of the OneLogin_Saml2_Response
+     * Tests the getAttributesWithFriendlyName method of the Response
      *
      * @covers OneLogin\Saml2\Response::getAttributesWithFriendlyName
      */
@@ -767,17 +833,20 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
         unset($settingsInfo['idp']['x509cert']);
         $settingsInfo['strict'] = false;
         $settingsInfo['idp']['certFingerprint'] = "385b1eec71143f00db6af936e2ea12a28771d72c";
-        $settingsInfo['sp']['privateKey'] = 'MIICXAIBAAKBgQDo6m+QZvYQ/xL0ElLgupK1QDcYL4f5PckwsNgS9pUvV7fzTqCHk8ThLxTk42MQ2McJsOeUJVP728KhymjFCqxgP4VuwRk9rpAl0+mhy6MPdyjyA6G14jrDWS65ysLchK4t/vwpEDz0SQlEoG1kMzllSm7zZS3XregA7DjNaUYQqwIDAQABAoGBALGR6bRBit+yV5TUU3MZSrf8WQSLWDLgs/33FQSAEYSib4+DJke2lKbI6jkGUoSJgFUXFbaQLtMY2+3VDsMKPBdAge9gIdvbkC4yoKjLGm/FBDOxxZcfLpR+9OPqU3qM9D0CNuliBWI7Je+p/zs09HIYucpDXy9E18KA1KNF6rfhAkEA9KoNam6wAKnmvMzz31ws3RuIOUeo2rx6aaVY95+P9tTxd6U+pNkwxy1aCGP+InVSwlYNA1aQ4Axi/GdMIWMkxwJBAPO1CP7cQNZQmu7yusY+GUObDII5YK9WLaY4RAicn5378crPBFxvUkqf9G6FHo7u88iTCIp+vwa3Hn9Tumg3iP0CQQDgUXWBasCVqzCxU5wY4tMDWjXYhpoLCpmVeRML3dDJt004rFm2HKe7Rhpw7PTZNQZOxUSjFeA4e0LaNf838UWLAkB8QfbHM3ffjhOg96PhhjINdVWoZCb230LBOHj/xxPfUmFTHcBEfQIBSJMxcrBFAnLL9qPpMXymqOFk3ETz9DTlAj8E0qGbp78aVbTOtuwEwNJII+RPw+Zkc+lKR+yaWkAzfIXw527NPHH3+rnBG72wyZr9ud4LAum9jh+5No1LQpk=';
-        $settingsInfo['sp']['x509cert'] = 'MIICGzCCAYQCCQCNNcQXom32VDANBgkqhkiG9w0BAQUFADBSMQswCQYDVQQGEwJVUzELMAkGA1UECBMCSU4xFTATBgNVBAcTDEluZGlhbmFwb2xpczERMA8GA1UEChMIT25lTG9naW4xDDAKBgNVBAsTA0VuZzAeFw0xNDA0MjMxODQxMDFaFw0xNTA0MjMxODQxMDFaMFIxCzAJBgNVBAYTAlVTMQswCQYDVQQIEwJJTjEVMBMGA1UEBxMMSW5kaWFuYXBvbGlzMREwDwYDVQQKEwhPbmVMb2dpbjEMMAoGA1UECxMDRW5nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDo6m+QZvYQ/xL0ElLgupK1QDcYL4f5PckwsNgS9pUvV7fzTqCHk8ThLxTk42MQ2McJsOeUJVP728KhymjFCqxgP4VuwRk9rpAl0+mhy6MPdyjyA6G14jrDWS65ysLchK4t/vwpEDz0SQlEoG1kMzllSm7zZS3XregA7DjNaUYQqwIDAQABMA0GCSqGSIb3DQEBBQUAA4GBALM2vGCiQ/vm+a6v40+VX2zdqHA2Q/1vF1ibQzJ54MJCOVWvs+vQXfZFhdm0OPM2IrDU7oqvKPqP6xOAeJK6H0yP7M4YL3fatSvIYmmfyXC9kt3Svz/NyrHzPhUnJ0ye/sUSXxnzQxwcm/9PwAqrQaA3QpQkH57ybF/OoryPe+2h';
+        $settingsInfo['sp']['privateKeyEnc'] = 'MIICXAIBAAKBgQDo6m+QZvYQ/xL0ElLgupK1QDcYL4f5PckwsNgS9pUvV7fzTqCHk8ThLxTk42MQ2McJsOeUJVP728KhymjFCqxgP4VuwRk9rpAl0+mhy6MPdyjyA6G14jrDWS65ysLchK4t/vwpEDz0SQlEoG1kMzllSm7zZS3XregA7DjNaUYQqwIDAQABAoGBALGR6bRBit+yV5TUU3MZSrf8WQSLWDLgs/33FQSAEYSib4+DJke2lKbI6jkGUoSJgFUXFbaQLtMY2+3VDsMKPBdAge9gIdvbkC4yoKjLGm/FBDOxxZcfLpR+9OPqU3qM9D0CNuliBWI7Je+p/zs09HIYucpDXy9E18KA1KNF6rfhAkEA9KoNam6wAKnmvMzz31ws3RuIOUeo2rx6aaVY95+P9tTxd6U+pNkwxy1aCGP+InVSwlYNA1aQ4Axi/GdMIWMkxwJBAPO1CP7cQNZQmu7yusY+GUObDII5YK9WLaY4RAicn5378crPBFxvUkqf9G6FHo7u88iTCIp+vwa3Hn9Tumg3iP0CQQDgUXWBasCVqzCxU5wY4tMDWjXYhpoLCpmVeRML3dDJt004rFm2HKe7Rhpw7PTZNQZOxUSjFeA4e0LaNf838UWLAkB8QfbHM3ffjhOg96PhhjINdVWoZCb230LBOHj/xxPfUmFTHcBEfQIBSJMxcrBFAnLL9qPpMXymqOFk3ETz9DTlAj8E0qGbp78aVbTOtuwEwNJII+RPw+Zkc+lKR+yaWkAzfIXw527NPHH3+rnBG72wyZr9ud4LAum9jh+5No1LQpk=';
+        $settingsInfo['sp']['x509certEnc'] = 'MIICGzCCAYQCCQCNNcQXom32VDANBgkqhkiG9w0BAQUFADBSMQswCQYDVQQGEwJVUzELMAkGA1UECBMCSU4xFTATBgNVBAcTDEluZGlhbmFwb2xpczERMA8GA1UEChMIT25lTG9naW4xDDAKBgNVBAsTA0VuZzAeFw0xNDA0MjMxODQxMDFaFw0xNTA0MjMxODQxMDFaMFIxCzAJBgNVBAYTAlVTMQswCQYDVQQIEwJJTjEVMBMGA1UEBxMMSW5kaWFuYXBvbGlzMREwDwYDVQQKEwhPbmVMb2dpbjEMMAoGA1UECxMDRW5nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDo6m+QZvYQ/xL0ElLgupK1QDcYL4f5PckwsNgS9pUvV7fzTqCHk8ThLxTk42MQ2McJsOeUJVP728KhymjFCqxgP4VuwRk9rpAl0+mhy6MPdyjyA6G14jrDWS65ysLchK4t/vwpEDz0SQlEoG1kMzllSm7zZS3XregA7DjNaUYQqwIDAQABMA0GCSqGSIb3DQEBBQUAA4GBALM2vGCiQ/vm+a6v40+VX2zdqHA2Q/1vF1ibQzJ54MJCOVWvs+vQXfZFhdm0OPM2IrDU7oqvKPqP6xOAeJK6H0yP7M4YL3fatSvIYmmfyXC9kt3Svz/NyrHzPhUnJ0ye/sUSXxnzQxwcm/9PwAqrQaA3QpQkH57ybF/OoryPe+2h';
 
         $settings = new Settings($settingsInfo);
 
         $xml = file_get_contents(TEST_ROOT . '/data/responses/wrapped_response_3.xml.base64');
-        $response = new Response($settings, $xml);
-
-        $valid = $response->isValid();
-
-        $this->assertFalse($valid);
+        try {
+            $response = new Response($settings, $xml);
+            $valid = $response->isValid();
+            $this->assertFalse($valid);
+            $this->assertEquals('Found an invalid Signed Element. SAML Response rejected', $response->getError());
+        } catch (Exception $e) {
+            $this->assertEquals('DOMDocument::loadXML(): Namespace prefix saml on Assertion is not defined in Entity, line: 1', $e->getMessage());
+        }
     }
 
     /**
@@ -1035,7 +1104,7 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
         $settings2->setStrict(true);
         $response4 = new Response($settings2, $xml);
         $this->assertFalse($response4->isValid());
-        $this->assertEquals('Invalid SAML Response. Not match the saml-schema-protocol-2.0.xsd', $response4->getError());
+        $this->assertEquals('Invalid SAML Response. Not match the eidlogin.xsd', $response4->getError());
     }
 
     /**
@@ -1097,14 +1166,19 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
      * Case Invalid Response, Invalid Audience
      *
      * @covers OneLogin\Saml2\Response::isValid
+     *
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
      */
     public function testIsInValidAudience()
     {
         $xml = file_get_contents(TEST_ROOT . '/data/responses/invalids/invalid_audience.xml.base64');
 
         $plainMessage = base64_decode($xml);
+        Utils::setBaseURL('http://stuff.com/endpoints/');
         $currentURL = Utils::getSelfURLNoQuery();
-        $plainMessage = str_replace('http://stuff.com/endpoints/endpoints/acs.php', $currentURL, $plainMessage);
+
+        $plainMessage = str_replace('http://stuff.com/endpoints/acs.php', $currentURL, $plainMessage);
         $message = base64_encode($plainMessage);
 
         $response = new Response($this->_settings, $message);
@@ -1115,7 +1189,7 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
         $response2 = new Response($this->_settings, $message);
 
         $this->assertFalse($response2->isValid());
-        $this->assertSame('Invalid audience for this Response (expected \'http://stuff.com/endpoints/metadata.php\', got \'http://invalid.audience.com\')', $response2->getError());
+        $this->assertEquals("Invalid audience for this Response (expected 'http://stuff.com/endpoints/metadata.php', got 'http://invalid.audience.com')", $response2->getError(false));
     }
 
     /**
@@ -1152,12 +1226,12 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
         $response3 = new Response($this->_settings, $message);
 
         $this->assertFalse($response3->isValid());
-        $this->assertEquals('Invalid issuer in the Assertion/Response (expected \'http://idp.example.com/\', got \'http://invalid.issuer.example.com/\')', $response3->getError());
+        $this->assertEquals("Invalid issuer in the Assertion/Response (expected 'http://idp.example.com/', got 'http://invalid.issuer.example.com/')", $response3->getError(false));
 
         $response4 = new Response($this->_settings, $message2);
 
         $this->assertFalse($response4->isValid());
-        $this->assertEquals('Invalid issuer in the Assertion/Response (expected \'http://idp.example.com/\', got \'http://invalid.isser.example.com/\')', $response4->getError());
+        $this->assertEquals("Invalid issuer in the Assertion/Response (expected 'http://idp.example.com/', got 'http://invalid.isser.example.com/')", $response4->getError(false));
     }
 
     /**
@@ -1279,7 +1353,7 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
     }
 
     /**
-     * Somtimes IdPs uses datetimes with miliseconds, this
+     * Sometimes IdPs uses datetimes with milliseconds, this
      * test is to verify that the toolkit supports them
      *
      * @covers OneLogin\Saml2\Response::isValid
@@ -1533,8 +1607,14 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
 
         $response = new Response($settings, $xml);
 
-        $this->assertFalse($response->isValid());
-        $this->assertEquals('openssl_x509_read(): supplied parameter cannot be coerced into an X509 certificate!', $response->getError());
+        $this->assertFalse(@$response->isValid());
+
+        $possibleErrors = [
+          "openssl_x509_read(): supplied parameter cannot be coerced into an X509 certificate!",
+          "openssl_x509_read(): X.509 Certificate cannot be retrieved",
+          "Unable to extract public key"
+        ];
+        $this->assertTrue(in_array($response->getError(), $possibleErrors));
     }
 
     /**
@@ -1744,5 +1824,19 @@ class ResponseTest extends \PHPUnit\Framework\TestCase
         $xml = file_get_contents(TEST_ROOT . '/data/responses/signed_message_response.xml.base64');
         $response = new Response($settings, $xml);
         $this->assertTrue($response->isValid());
+    }
+
+    public function testCanGetEncryptedNameIdInEncryptedAssertion()
+    {
+        $xml = file_get_contents(TEST_ROOT . '/data/responses/response_encrypted_nameid_encrypted_assertion.xml.base64');
+        $response = new Response($this->_settings, $xml);
+        $this->assertTrue($response->isValid());
+        $this->assertSame('user@example.com', $response->getNameId());
+
+        // SAML Response that contains an encrypted Assertion with encrypted nameId is not supported (see Response.php).
+        // $xml = file_get_contents(TEST_ROOT . '/data/responses/response_encrypted_nameid_encrypted_assertion2.xml.base64');
+        // $response = new Response($this->_settings, $xml);
+        // $this->assertTrue($response->isValid());
+        // $this->assertSame('492882615acf31c8096b627245d76ae53036c090', $response->getNameId());
     }
 }
