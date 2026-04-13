@@ -6,6 +6,10 @@
 ### Fixed
 ### Security
 
+## 1.2.0 – 2026-04-13
+### Changed
+- Use eid-login/xmlseclibs version 1.1.0 with phpseclib version 3
+
 ## 1.1.0 – 2021-12-13
 ### Added
 - Set optional arg of buildAuthnRequest to the end to become php8 compatible
