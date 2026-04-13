@@ -100,7 +100,7 @@ class Response
             Utils::setBaseURL($baseURL);
         }
 
-        $this->response = $response;
+        $this->response = base64_decode($response);
 
         $this->document = new DOMDocument();
         $this->document = Utils::loadXML($this->document, $this->response);
